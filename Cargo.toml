@@ -1,0 +1,12 @@
+[package]
+name = "modbus-mqtt"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clap = { version = "3.2.12", features = ["derive", "env"] }
+rumqttc = { version = "0.13.0", features = ["url"], git = "https://github.com/bytebeamio/rumqtt" }
+tokio = { version = "1.20.0", features = ["rt", "rt-multi-thread"] }
+tokio-modbus = "0.5.3"
