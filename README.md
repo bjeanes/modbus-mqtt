@@ -32,5 +32,5 @@ prefix/connection/<connection>/monitor[/opt-name] <- {
 
 ## Similar projects
 
-https://github.com/Instathings/modbus2mqtt
-https://github.com/TenySmart/ModbusTCP2MQTT - Sungrow inverter specific
+* https://github.com/Instathings/modbus2mqtt
+* https://github.com/TenySmart/ModbusTCP2MQTT - Sungrow inverter specific
