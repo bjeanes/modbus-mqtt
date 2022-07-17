@@ -5,7 +5,7 @@ Very rough for now.
 ## Topic spec
 
 ```
-prefix/status -> { "status": "running" } # last-will message here?
+prefix/status -> { "status": "running" } # last-will message here too
 
 prefix/connect/<connection> <- {
         "host": "localhost",

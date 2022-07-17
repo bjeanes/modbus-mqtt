@@ -1,9 +1,7 @@
-use rumqttc::{self, AsyncClient, Event, Incoming, MqttOptions, Publish, QoS};
+use rumqttc::{self, AsyncClient, Event, Incoming, LastWill, MqttOptions, Publish, QoS};
 use serde::{Deserialize, Serialize};
-// use serde_json::Result;
-use std::error::Error;
+use serde_json::json;
 use std::time::Duration;
-use tokio::{task, time};
 use tokio_modbus::prelude::*;
 
 use clap::Parser;
@@ -76,6 +74,13 @@ struct ConnectStatus {
     status: ConnectState,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "lowercase")]
+enum MainStatus {
+    Running,
+    Stopped,
+}
+
 #[tokio::main(worker_threads = 1)]
 async fn main() {
     let args = Cli::parse();
@@ -85,18 +90,39 @@ async fn main() {
         mqttoptions.set_credentials(u, p);
     }
     mqttoptions.set_keep_alive(Duration::from_secs(5));
+    mqttoptions.set_last_will(LastWill {
+        topic: format!("{}/status", args.mqtt_topic_prefix).to_string(),
+        message: serde_json::to_vec(&json!({
+            "status": MainStatus::Stopped,
+        }))
+        .unwrap()
+        .into(),
+        qos: QoS::AtMostOnce,
+        retain: false,
+    });
 
     let (client, mut eventloop) = AsyncClient::new(mqttoptions, 10);
 
     client
-        .subscribe(format!("{}/#", args.mqtt_topic_prefix), QoS::AtMostOnce)
+        .subscribe(
+            format!("{}/connect/#", args.mqtt_topic_prefix),
+            QoS::AtMostOnce,
+        )
         .await
         .unwrap();
 
-    // let socket_addr = "10.10.10.219:502".parse().unwrap();
-    // let mut modbus = tcp::connect_slave(socket_addr, Slave(0x01)).await.unwrap();
-    // let data = modbus.read_input_registers(5017, 2).await.unwrap();
-    // println!("Response is '{:#06x?}'", data);
+    client
+        .publish(
+            format!("{}/status", args.mqtt_topic_prefix).to_string(),
+            QoS::AtMostOnce,
+            false,
+            serde_json::to_vec(&json!({
+                "status": MainStatus::Running,
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
 
     while let Ok(event) = eventloop.poll().await {
         match event {
@@ -147,7 +173,6 @@ async fn main() {
                                     .unwrap();
                             }
                             Err(err) => {
-                                use serde_json::json;
                                 client
                                     .publish(
                                         format!("{}/status/{}", args.mqtt_topic_prefix, conn_name)
