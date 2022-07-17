@@ -1,7 +1,10 @@
-use rumqttc::{self, AsyncClient, MqttOptions, QoS};
+use rumqttc::{self, AsyncClient, Event, Incoming, MqttOptions, Publish, QoS};
+use serde::{Deserialize, Serialize};
+// use serde_json::Result;
 use std::error::Error;
 use std::time::Duration;
 use tokio::{task, time};
+use tokio_modbus::prelude::*;
 
 use clap::Parser;
 
@@ -20,10 +23,61 @@ struct Cli {
 
     #[clap(short = 'P', long, env)]
     mqtt_password: Option<String>,
+
+    #[clap(short = 't', long, default_value = "modbus-mqtt")]
+    // Where to listen for commands
+    mqtt_topic_prefix: String,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
+enum ModbusProto {
+    Tcp {
+        host: String,
+
+        #[serde(default = "default_modbus_port")]
+        port: u16,
+    },
+    Rtu {
+        tty: String,
+        baud_rate: u32,
+    },
+}
+
+fn default_modbus_port() -> u16 {
+    502
+}
+
+#[derive(Serialize, Deserialize)]
+struct Connect {
+    #[serde(flatten)]
+    settings: ModbusProto,
+
+    #[serde(default = "default_modbus_unit")]
+    slave: u8, // TODO make `Slave` but need custom deserializer I think
+}
+
+fn default_modbus_unit() -> u8 {
+    0
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "lowercase")]
+enum ConnectState {
+    Connected,
+    Disconnected,
+    Errored,
+}
+
+#[derive(Serialize)]
+struct ConnectStatus {
+    #[serde(flatten)]
+    connect: Connect,
+    status: ConnectState,
 }
 
 #[tokio::main(worker_threads = 1)]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() {
     let args = Cli::parse();
 
     let mut mqttoptions = MqttOptions::new("mqtt", args.mqtt_host.as_str(), args.mqtt_port);
@@ -33,31 +87,108 @@ async fn main() -> Result<(), Box<dyn Error>> {
     mqttoptions.set_keep_alive(Duration::from_secs(5));
 
     let (client, mut eventloop) = AsyncClient::new(mqttoptions, 10);
-    task::spawn(async move {
-        requests(client).await;
-        time::sleep(Duration::from_secs(3)).await;
-    });
 
-    loop {
-        let event = eventloop.poll().await;
-        println!("{:?}", event.unwrap());
-    }
-}
-
-async fn requests(client: AsyncClient) {
     client
-        .subscribe("hello/world", QoS::AtMostOnce)
+        .subscribe(format!("{}/#", args.mqtt_topic_prefix), QoS::AtMostOnce)
         .await
         .unwrap();
 
-    for i in 1..=10 {
-        client
-            .publish("hello/world", QoS::ExactlyOnce, false, vec![1; i])
-            .await
-            .unwrap();
+    // let socket_addr = "10.10.10.219:502".parse().unwrap();
+    // let mut modbus = tcp::connect_slave(socket_addr, Slave(0x01)).await.unwrap();
+    // let data = modbus.read_input_registers(5017, 2).await.unwrap();
+    // println!("Response is '{:#06x?}'", data);
 
-        time::sleep(Duration::from_secs(1)).await;
+    while let Ok(event) = eventloop.poll().await {
+        match event {
+            Event::Outgoing(_) => (),
+            Event::Incoming(Incoming::ConnAck(_)) => println!("Connected to MQTT!"),
+            Event::Incoming(Incoming::PingResp | Incoming::SubAck(_)) => (),
+
+            Event::Incoming(Incoming::Publish(Publish { topic, payload, .. })) => {
+                println!("{} {:?}", &topic, &payload);
+                match topic.split('/').collect::<Vec<&str>>()[..] {
+                    [prefix, "connect", conn_name] if prefix == args.mqtt_topic_prefix.as_str() => {
+                        match serde_json::from_slice::<Connect>(&payload) {
+                            Ok(connect) => {
+                                let slave = Slave(connect.slave);
+                                // println!("{:?}", connect);
+                                let status = match connect.settings {
+                                    ModbusProto::Tcp { ref host, port } => {
+                                        let socket_addr =
+                                            format!("{}:{}", host, port).parse().unwrap();
+                                        let mut modbus =
+                                            tcp::connect_slave(socket_addr, slave).await.unwrap();
+                                        ConnectStatus {
+                                            connect: connect,
+                                            status: ConnectState::Connected,
+                                        }
+                                    }
+                                    ModbusProto::Rtu { ref tty, baud_rate } => {
+                                        let builder = tokio_serial::new(tty, baud_rate);
+                                        let port =
+                                            tokio_serial::SerialStream::open(&builder).unwrap();
+                                        let mut modbus =
+                                            rtu::connect_slave(port, slave).await.unwrap();
+                                        ConnectStatus {
+                                            connect: connect,
+                                            status: ConnectState::Connected,
+                                        }
+                                    }
+                                };
+                                client
+                                    .publish(
+                                        format!("{}/status/{}", args.mqtt_topic_prefix, conn_name)
+                                            .as_str(),
+                                        QoS::AtMostOnce,
+                                        false,
+                                        serde_json::to_vec(&status).unwrap(),
+                                    )
+                                    .await
+                                    .unwrap();
+                            }
+                            Err(err) => {
+                                use serde_json::json;
+                                client
+                                    .publish(
+                                        format!("{}/status/{}", args.mqtt_topic_prefix, conn_name)
+                                            .as_str(),
+                                        QoS::AtMostOnce,
+                                        false,
+                                        serde_json::to_vec(&json!({
+                                            "status": ConnectState::Errored,
+                                            "error": err.to_string(),
+                                        }))
+                                        .unwrap(),
+                                    )
+                                    .await
+                                    .unwrap();
+                            }
+                        }
+                    }
+                    _ => (),
+                };
+            }
+            _ => {
+                println!("{:?}", event);
+            }
+        }
     }
-
-    time::sleep(Duration::from_secs(120)).await;
 }
+
+// async fn requests(client: AsyncClient) {
+//     client
+//         .subscribe("hello/world", QoS::AtMostOnce)
+//         .await
+//         .unwrap();
+
+//     for i in 1..=10 {
+//         client
+//             .publish("hello/world", QoS::ExactlyOnce, false, vec![1; i])
+//             .await
+//             .unwrap();
+
+//         time::sleep(Duration::from_secs(1)).await;
+//     }
+
+//     time::sleep(Duration::from_secs(120)).await;
+// }
