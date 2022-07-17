@@ -42,15 +42,39 @@ enum ModbusProto {
         // tty: std::path::PathBuf,
         tty: String,
         baud_rate: u32,
-        // data_bits: tokio_serial::DataBits, // TODO: allow this to be represented as a number instead of string
-        // stop_bits: tokio_serial::StopBits, // TODO: allow this to be represented as a number instead of string
-        // flow_control: tokio_se&rial::FlowControl,
-        // parity: tokio_serial::Parity,
+
+        #[serde(default = "default_modbus_data_bits")]
+        data_bits: tokio_serial::DataBits, // TODO: allow this to be represented as a number instead of string
+
+        #[serde(default = "default_modbus_stop_bits")]
+        stop_bits: tokio_serial::StopBits, // TODO: allow this to be represented as a number instead of string
+
+        #[serde(default = "default_modbus_flow_control")]
+        flow_control: tokio_serial::FlowControl,
+
+        #[serde(default = "default_modbus_parity")]
+        parity: tokio_serial::Parity,
     },
 }
 
 fn default_modbus_port() -> u16 {
     502
+}
+
+fn default_modbus_data_bits() -> tokio_serial::DataBits {
+    tokio_serial::DataBits::Eight
+}
+
+fn default_modbus_stop_bits() -> tokio_serial::StopBits {
+    tokio_serial::StopBits::One
+}
+
+fn default_modbus_flow_control() -> tokio_serial::FlowControl {
+    tokio_serial::FlowControl::None
+}
+
+fn default_modbus_parity() -> tokio_serial::Parity {
+    tokio_serial::Parity::None
 }
 
 #[derive(Serialize, Deserialize)]
@@ -337,8 +361,19 @@ async fn handle_connect(
                     let socket_addr = format!("{}:{}", host, port).parse().unwrap();
                     tcp::connect_slave(socket_addr, slave).await.unwrap()
                 }
-                ModbusProto::Rtu { ref tty, baud_rate } => {
-                    let builder = tokio_serial::new(tty, baud_rate);
+                ModbusProto::Rtu {
+                    ref tty,
+                    baud_rate,
+                    data_bits,
+                    stop_bits,
+                    flow_control,
+                    parity,
+                } => {
+                    let builder = tokio_serial::new(tty, baud_rate)
+                        .data_bits(data_bits)
+                        .flow_control(flow_control)
+                        .parity(parity)
+                        .stop_bits(stop_bits);
                     let port = tokio_serial::SerialStream::open(&builder).unwrap();
                     rtu::connect_slave(port, slave).await.unwrap()
                 }
