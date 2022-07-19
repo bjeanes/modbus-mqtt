@@ -77,22 +77,72 @@ fn default_modbus_parity() -> tokio_serial::Parity {
     tokio_serial::Parity::None
 }
 
-// TODO: `scale`, `offset`, `precision`
-// TODO: migrate `count` from `Range` into this enum to force the correct size?
 #[derive(Clone, Serialize, Deserialize)]
-enum RegisterValueType {
+#[serde(rename_all = "lowercase")]
+// TODO: `scale`, `offset`, `precision`
+enum RegisterFixedValueType {
     U8,
     U16,
     U32,
     U64,
+
     I8,
     I16,
     I32,
     I64,
+
     F32,
     F64,
-    // Array(u16, RegisterValueType),
-    String(u16),
+}
+
+impl RegisterFixedValueType {
+    // Modbus limits sequential reads to 125 apparently, so 8-bit should be fine - https://github.com/slowtec/tokio-modbus/issues/112#issuecomment-1095316069=
+    fn size(&self) -> u8 {
+        use RegisterFixedValueType::*;
+        // Each Modbus register holds 16-bits, so count is half what the byte count would be
+        match self {
+            U8 => 1,
+            U16 => 1,
+            U32 => 2,
+            U64 => 4,
+            I8 => 1,
+            I16 => 1,
+            I32 => 2,
+            I64 => 4,
+            F32 => 2,
+            F64 => 4,
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum RegisterVariableValueType {
+    String,
+    Array(RegisterFixedValueType),
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(untagged, rename_all = "lowercase")]
+enum RegisterValueType {
+    Fixed(RegisterFixedValueType),
+    Variable(RegisterVariableValueType, u8),
+}
+
+impl RegisterValueType {
+    // Modbus limits sequential reads to 125 apparently, so 8-bit should be fine - https://github.com/slowtec/tokio-modbus/issues/112#issuecomment-1095316069=
+    fn size(&self) -> u8 {
+        use RegisterValueType::*;
+        use RegisterVariableValueType::*;
+
+        match self {
+            Fixed(fixed) => fixed.size(),
+            Variable(variable, count) => match variable {
+                String => *count,
+                Array(fixed) => *count * fixed.size(),
+            },
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -103,32 +153,27 @@ struct RegisterParse {
     #[serde(default = "default_swap")]
     swap_words: bool,
 
-    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
-    value_type: Option<RegisterValueType>,
+    #[serde(rename = "type", default = "default_value_type")]
+    value_type: RegisterValueType,
 }
 
 fn default_swap() -> bool {
     false
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-struct Range {
-    address: u16,
-
-    #[serde(alias = "size")]
-    count: u8, // Modbus limits to 125 in fact - https://github.com/slowtec/tokio-modbus/issues/112#issuecomment-1095316069=
+fn default_value_type() -> RegisterValueType {
+    RegisterValueType::Fixed(RegisterFixedValueType::U16)
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 struct Register {
-    #[serde(flatten)]
-    range: Range,
+    address: u16,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
-    parse: Option<RegisterParse>,
+    #[serde(flatten, default = "default_register_parse")]
+    parse: RegisterParse,
 
     #[serde(
         with = "humantime_serde",
@@ -140,7 +185,15 @@ struct Register {
 }
 
 fn default_register_interval() -> Duration {
-    Duration::from_secs(10)
+    Duration::from_secs(60)
+}
+
+fn default_register_parse() -> RegisterParse {
+    RegisterParse {
+        swap_bytes: default_swap(),
+        swap_words: default_swap(),
+        value_type: default_value_type(),
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -520,16 +573,19 @@ async fn watch_registers(
 
     loop {
         interval.tick().await;
-        for ref r in registers.iter() {
+        for r in registers.iter() {
             let address = if address_offset >= 0 {
-                r.range.address.checked_add(address_offset as u16)
+                r.address.checked_add(address_offset as u16)
             } else {
-                r.range
-                    .address
-                    .checked_sub(address_offset.unsigned_abs() as u16)
+                r.address.checked_sub(address_offset.unsigned_abs() as u16)
             };
             if let Some(address) = address {
-                println!("Polling {:?} {}", read_type, address);
+                println!(
+                    "Polling {:?} {} {}",
+                    read_type,
+                    address,
+                    &r.name.as_ref().unwrap_or(&"".to_string())
+                );
 
                 let (tx, rx) = oneshot::channel();
 
@@ -537,7 +593,7 @@ async fn watch_registers(
                     .send(ModbusCommand::Read(
                         read_type,
                         address,
-                        r.range.count.into(),
+                        r.parse.value_type.size(),
                         tx,
                     ))
                     .await
@@ -549,7 +605,7 @@ async fn watch_registers(
 
                 dispatcher
                     .send(DispatchCommand::Publish {
-                        topic: format!("{}/{}", registers_prefix, r.range.address),
+                        topic: format!("{}/{}", registers_prefix, r.address),
                         payload: payload.clone(),
                     })
                     .await
