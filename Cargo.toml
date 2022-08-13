@@ -17,3 +17,5 @@ serialport = { version = "4.2.0", features = ["serde"] }
 tokio = { version = "1.20.0", features = ["rt", "rt-multi-thread", "time"] }
 tokio-modbus = "0.5.3"
 tokio-serial = "5.4.3"
+tracing = "0.1.36"
+tracing-subscriber = "0.3.15"

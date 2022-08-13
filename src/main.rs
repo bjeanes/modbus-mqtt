@@ -4,6 +4,7 @@ use serde_json::json;
 use std::{collections::HashMap, time::Duration};
 use tokio::{sync::mpsc, sync::oneshot, time::MissedTickBehavior};
 use tokio_modbus::prelude::*;
+use tracing::{debug, error, info, span, warn, Level};
 
 use clap::Parser;
 
@@ -39,6 +40,8 @@ enum MainStatus {
 
 #[tokio::main(worker_threads = 1)]
 async fn main() {
+    tracing_subscriber::fmt::init();
+
     let args = Cli::parse();
 
     let (registry_tx, mut registry_rx) = mpsc::channel::<RegistryCommand>(32);
@@ -80,7 +83,7 @@ async fn mqtt_dispatcher(
     registry: mpsc::Sender<RegistryCommand>,
     mut rx: mpsc::Receiver<DispatchCommand>,
 ) {
-    println!("Connecting to MQTT broker...");
+    info!("Connecting to MQTT broker...");
 
     options.set_last_will(LastWill {
         topic: format!("{}/status", prefix).to_string(),
@@ -116,7 +119,7 @@ async fn mqtt_dispatcher(
     let rx_loop_handler = {
         let client = client.clone();
         tokio::spawn(async move {
-            println!("Start dispatcher rx loop");
+            info!("Start dispatcher rx loop");
             while let Some(command) = rx.recv().await {
                 match command {
                     DispatchCommand::Publish { topic, payload } => {
@@ -135,11 +138,11 @@ async fn mqtt_dispatcher(
 
         match event {
             Out(_) => (),
-            In(Incoming::ConnAck(_)) => println!("Connected to MQTT!"),
+            In(Incoming::ConnAck(_)) => info!("Connected to MQTT!"),
             In(Incoming::PingResp | Incoming::SubAck(_)) => (),
 
             In(Incoming::Publish(Publish { topic, payload, .. })) => {
-                println!("{} -> {:?}", &topic, &payload);
+                debug!("{} -> {:?}", &topic, &payload);
 
                 match topic.split('/').collect::<Vec<&str>>()[..] {
                     [p, "connect", conn_name] if p == prefix.as_str() => {
@@ -155,7 +158,7 @@ async fn mqtt_dispatcher(
                 };
             }
             _ => {
-                println!("{:?}", event);
+                debug!("{:?}", event);
             }
         }
     }
@@ -181,7 +184,7 @@ async fn connection_registry(
     dispatcher: mpsc::Sender<DispatchCommand>,
     mut rx: mpsc::Receiver<RegistryCommand>,
 ) {
-    println!("Starting connection registry...");
+    info!("Starting connection registry...");
     let mut db: RegistryDb = HashMap::new();
 
     while let Some(command) = rx.recv().await {
@@ -193,7 +196,7 @@ async fn connection_registry(
                 }
             }
             Connect { id, details } => {
-                println!("Connection {}: {:?}", id, &details);
+                info!(id, payload = ?details, "Establishing connection");
                 let prefix = prefix.clone();
                 let dispatcher = dispatcher.clone();
 
@@ -206,7 +209,7 @@ async fn connection_registry(
                     tokio::spawn(handle_connect(dispatcher, id, prefix, details)),
                 );
             }
-            _ => println!("unimplemented"),
+            _ => error!("unimplemented"),
         }
     }
 }
@@ -225,6 +228,7 @@ enum ModbusCommand {
 
 type ModbusResponse = oneshot::Sender<Result<Vec<u16>, std::io::Error>>;
 
+#[tracing::instrument(level = "debug")]
 async fn handle_connect(
     dispatcher: mpsc::Sender<DispatchCommand>,
     id: ConnectionId,
@@ -233,7 +237,7 @@ async fn handle_connect(
 ) {
     use modbus::config::*;
     use modbus::ConnectState;
-    println!("Starting connection handler for {}", id);
+    info!("Starting connection handler for {}", id);
     match serde_json::from_slice::<Connect>(&payload) {
         Ok(connect) => {
             let unit = connect.unit;
@@ -371,7 +375,7 @@ async fn watch_registers(
                 r.address.checked_sub(address_offset.unsigned_abs() as u16)
             };
             if let Some(address) = address {
-                println!(
+                debug!(
                     "Polling {:?} {} {}",
                     read_type,
                     address,
