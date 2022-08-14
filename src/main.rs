@@ -375,92 +375,38 @@ async fn watch_registers(
                 r.address.checked_sub(address_offset.unsigned_abs() as u16)
             };
             if let Some(address) = address {
+                let size = r.parse.value_type.size();
                 debug!(
-                    "Polling {:?} {} {}",
-                    read_type,
+                    name = r.name.as_ref().unwrap_or(&"".to_string()),
                     address,
-                    &r.name.as_ref().unwrap_or(&"".to_string())
+                    size,
+                    register_type = ?read_type,
+                    value_type = r.parse.value_type.type_name(),
+                    "Polling register",
                 );
 
                 let (tx, rx) = oneshot::channel();
 
                 modbus
-                    .send(ModbusCommand::Read(
-                        read_type,
-                        address,
-                        r.parse.value_type.size(),
-                        tx,
-                    ))
+                    .send(ModbusCommand::Read(read_type, address, size, tx))
                     .await
                     .unwrap();
 
-                let values = rx.await.unwrap().unwrap();
+                let words = rx.await.unwrap().unwrap();
 
-                let swapped_values = if r.parse.swap_bytes.0 {
-                    values.iter().map(|v| v.swap_bytes()).collect()
-                } else {
-                    values.clone()
-                };
+                let swapped_words = r.apply_swaps(&words);
 
-                let swapped_values = if r.parse.swap_words.0 {
-                    swapped_values
-                        .chunks_exact(2)
-                        .flat_map(|chunk| vec![chunk[1], chunk[0]])
-                        .collect()
-                } else {
-                    swapped_values
-                };
+                let value = r.from_words(&swapped_words);
 
-                let bytes: Vec<u8> = swapped_values
-                    .iter()
-                    .flat_map(|v| v.to_ne_bytes())
-                    .collect();
+                debug!(
+                    name = r.name.as_ref().unwrap_or(&"".to_string()),
+                    address,
+                    %value,
+                    raw = ?words,
+                    "Received value",
+                );
 
-                use crate::modbus::config::RegisterValueType as T;
-                use crate::modbus::config::{RegisterArray, RegisterNumeric as N, RegisterString};
-
-                let value = match r.parse.value_type {
-                    T::Numeric {
-                        ref of,
-                        adjust: ref _adjust,
-                    } => match of {
-                        N::U8 => json!(bytes[1]), // or is it 0?
-                        N::U16 => json!(swapped_values[0]),
-                        N::U32 => {
-                            json!(bytes.try_into().map(|bytes| u32::from_le_bytes(bytes)).ok())
-                        }
-                        N::U64 => {
-                            json!(bytes.try_into().map(|bytes| u64::from_le_bytes(bytes)).ok())
-                        }
-                        N::I8 => json!(vec![bytes[1]]
-                            .try_into()
-                            .map(|bytes| i8::from_le_bytes(bytes))),
-                        N::I16 => {
-                            json!(bytes.try_into().map(|bytes| i16::from_le_bytes(bytes)).ok())
-                        }
-                        N::I32 => {
-                            json!(bytes.try_into().map(|bytes| i32::from_le_bytes(bytes)).ok())
-                        }
-                        N::I64 => {
-                            json!(bytes.try_into().map(|bytes| i64::from_le_bytes(bytes)).ok())
-                        }
-                        N::F32 => {
-                            json!(bytes.try_into().map(|bytes| f32::from_le_bytes(bytes)).ok())
-                        }
-                        N::F64 => {
-                            json!(bytes.try_into().map(|bytes| f64::from_le_bytes(bytes)).ok())
-                        }
-                    },
-                    T::String(RegisterString { .. }) => {
-                        json!(String::from_utf16_lossy(&swapped_values))
-                    }
-                    T::Array(RegisterArray { .. }) => todo!(),
-                };
-
-                let payload = serde_json::to_vec(
-                    &json!({ "raw": values, "swapped": swapped_values, "value": value }),
-                )
-                .unwrap();
+                let payload = serde_json::to_vec(&json!({ "value": value, "raw": words })).unwrap();
 
                 dispatcher
                     .send(DispatchCommand::Publish {

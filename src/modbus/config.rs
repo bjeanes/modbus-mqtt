@@ -54,20 +54,17 @@ fn default_modbus_parity() -> tokio_serial::Parity {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "lowercase", default)]
 pub struct RegisterNumericAdjustment {
-    #[serde(default)]
-    scale: i8, // powers of 10 (0 = no adjustment, 1 = x10, -1 = /10)
-
-    #[serde(default)]
-    offset: i8,
+    pub scale: i8, // powers of 10 (0 = no adjustment, 1 = x10, -1 = /10)
+    pub offset: i8,
     // precision: Option<u8>,
 }
 
 impl Default for RegisterNumericAdjustment {
     fn default() -> Self {
         Self {
-            scale: 1,
+            scale: 0,
             offset: 0,
         }
     }
@@ -106,6 +103,10 @@ impl RegisterNumeric {
             U32 | I32 | F32 => 2,
             U64 | I64 | F64 => 4,
         }
+    }
+
+    fn type_name(&self) -> String {
+        format!("{:?}", *self).to_lowercase()
     }
 }
 
@@ -152,6 +153,16 @@ pub enum RegisterValueType {
     String(RegisterString),
 }
 
+impl RegisterValueType {
+    pub fn type_name(&self) -> String {
+        match *self {
+            RegisterValueType::Numeric { ref of, .. } => of.type_name(),
+            RegisterValueType::Array(_) => "array".to_owned(),
+            RegisterValueType::String(_) => "string".to_owned(),
+        }
+    }
+}
+
 impl Default for RegisterValueType {
     fn default() -> Self {
         RegisterValueType::Numeric {
@@ -175,6 +186,7 @@ impl RegisterValueType {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Swap(pub bool);
 
 impl Default for Swap {
@@ -404,7 +416,10 @@ fn parse_empty_register_parser_defaults() {
             swap_words: Swap(false),
             value_type: RegisterValueType::Numeric {
                 of: RegisterNumeric::U16,
-                ..
+                adjust: RegisterNumericAdjustment {
+                    scale: 0,
+                    offset: 0,
+                }
             }
         }
     ));
