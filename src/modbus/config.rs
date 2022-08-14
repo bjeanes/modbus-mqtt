@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use std::time::Duration;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[cfg(test)]
+use serde_json::json;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ModbusProto {
     Tcp {
@@ -51,11 +53,31 @@ fn default_modbus_parity() -> tokio_serial::Parity {
     tokio_serial::Parity::None
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-// TODO: `scale`, `offset`, `precision`
-pub enum RegisterFixedValueType {
+pub struct RegisterNumericAdjustment {
+    #[serde(default)]
+    scale: i8, // powers of 10 (0 = no adjustment, 1 = x10, -1 = /10)
+
+    #[serde(default)]
+    offset: i8,
+    // precision: Option<u8>,
+}
+
+impl Default for RegisterNumericAdjustment {
+    fn default() -> Self {
+        Self {
+            scale: 1,
+            offset: 0,
+        }
+    }
+}
+
+#[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RegisterNumeric {
     U8,
+    #[default]
     U16,
     U32,
     U64,
@@ -73,74 +95,116 @@ pub enum RegisterFixedValueType {
     F64,
 }
 
-impl RegisterFixedValueType {
+impl RegisterNumeric {
     // Modbus limits sequential reads to 125 apparently, so 8-bit should be fine - https://github.com/slowtec/tokio-modbus/issues/112#issuecomment-1095316069=
     fn size(&self) -> u8 {
-        use RegisterFixedValueType::*;
+        use RegisterNumeric::*;
         // Each Modbus register holds 16-bits, so count is half what the byte count would be
         match self {
-            U8 => 1,
-            U16 => 1,
-            U32 => 2,
-            U64 => 4,
-            I8 => 1,
-            I16 => 1,
-            I32 => 2,
-            I64 => 4,
-            F32 => 2,
-            F64 => 4,
+            U8 | I8 => 1,
+            U16 | I16 => 1,
+            U32 | I32 | F32 => 2,
+            U64 | I64 | F64 => 4,
         }
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum RegisterVariableValueType {
-    String,
-    Array(RegisterFixedValueType),
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename = "string")]
+pub struct RegisterString {
+    length: u8,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(untagged, rename_all = "lowercase")]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename = "array")]
+pub struct RegisterArray {
+    count: u8,
+
+    #[serde(default)]
+    of: RegisterNumeric,
+
+    // Arrays are only of numeric types, so we can apply an adjustment here
+    #[serde(flatten, skip_serializing_if = "IsDefault::is_default")]
+    adjust: RegisterNumericAdjustment,
+}
+
+impl Default for RegisterArray {
+    fn default() -> Self {
+        Self {
+            count: 1,
+            of: Default::default(),
+            adjust: Default::default(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum RegisterValueType {
-    Fixed(RegisterFixedValueType),
-    Variable(RegisterVariableValueType, u8),
+    Numeric {
+        #[serde(rename = "type", default)]
+        of: RegisterNumeric,
+
+        #[serde(flatten, skip_serializing_if = "IsDefault::is_default")]
+        adjust: RegisterNumericAdjustment,
+    },
+    Array(RegisterArray),
+    String(RegisterString),
+}
+
+impl Default for RegisterValueType {
+    fn default() -> Self {
+        RegisterValueType::Numeric {
+            of: Default::default(),
+            adjust: Default::default(),
+        }
+    }
 }
 
 impl RegisterValueType {
     // Modbus limits sequential reads to 125 apparently, so 8-bit should be fine - https://github.com/slowtec/tokio-modbus/issues/112#issuecomment-1095316069=
     pub fn size(&self) -> u8 {
         use RegisterValueType::*;
-        use RegisterVariableValueType::*;
 
         match self {
-            Fixed(fixed) => fixed.size(),
-            Variable(variable, count) => match variable {
-                String => *count,
-                Array(fixed) => *count * fixed.size(),
-            },
+            Numeric { of, .. } => of.size(),
+            String(RegisterString { length }) => *length,
+            Array(RegisterArray { of, count, .. }) => of.size() * count,
         }
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Swap(pub bool);
+
+impl Default for Swap {
+    fn default() -> Self {
+        Self(false)
+    }
+}
+
+trait IsDefault {
+    fn is_default(&self) -> bool;
+}
+impl<T> IsDefault for T
+where
+    T: Default + PartialEq,
+{
+    fn is_default(&self) -> bool {
+        *self == Default::default()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct RegisterParse {
-    #[serde(default = "default_swap")]
-    pub swap_bytes: bool,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    pub swap_bytes: Swap,
 
-    #[serde(default = "default_swap")]
-    pub swap_words: bool,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    pub swap_words: Swap,
 
-    #[serde(rename = "type", default = "default_value_type")]
+    #[serde(flatten, skip_serializing_if = "IsDefault::is_default")]
     pub value_type: RegisterValueType,
-}
-
-fn default_swap() -> bool {
-    false
-}
-
-fn default_value_type() -> RegisterValueType {
-    RegisterValueType::Fixed(RegisterFixedValueType::U16)
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -150,7 +214,7 @@ pub struct Register {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 
-    #[serde(flatten, default = "default_register_parse")]
+    #[serde(flatten, default, skip_serializing_if = "IsDefault::is_default")]
     pub parse: RegisterParse,
 
     #[serde(
@@ -164,14 +228,6 @@ pub struct Register {
 
 fn default_register_interval() -> Duration {
     Duration::from_secs(60)
-}
-
-fn default_register_parse() -> RegisterParse {
-    RegisterParse {
-        swap_bytes: default_swap(),
-        swap_words: default_swap(),
-        value_type: default_value_type(),
-    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -209,7 +265,6 @@ fn parse_minimal_tcp_connect_config() {
     let result = serde_json::from_value::<Connect>(json!({
         "host": "1.1.1.1"
     }));
-    assert!(result.is_ok());
 
     let connect = result.unwrap();
     assert!(matches!(
@@ -223,7 +278,7 @@ fn parse_minimal_tcp_connect_config() {
 
 #[test]
 fn parse_full_tcp_connect_config() {
-    let result = serde_json::from_value::<Connect>(json!({
+    let _ = serde_json::from_value::<Connect>(json!({
         "host": "10.10.10.219",
         "unit": 1,
         "address_offset": -1,
@@ -283,9 +338,8 @@ fn parse_full_tcp_connect_config() {
                 "period": "90s"
             }
         ]
-    }));
-
-    assert!(result.is_ok());
+    }))
+    .unwrap();
 }
 
 #[test]
@@ -294,7 +348,6 @@ fn parse_minimal_rtu_connect_config() {
         "tty": "/dev/ttyUSB0",
         "baud_rate": 9600,
     }));
-    assert!(result.is_ok());
 
     let connect = result.unwrap();
     use tokio_serial::*;
@@ -310,4 +363,139 @@ fn parse_minimal_rtu_connect_config() {
             ..
         } if tty == "/dev/ttyUSB0"
     ))
+}
+
+#[test]
+fn parse_complete_rtu_connect_config() {
+    let result = serde_json::from_value::<Connect>(json!({
+        "tty": "/dev/ttyUSB0",
+        "baud_rate": 12800,
+
+        // TODO: make lowercase words work
+        "data_bits": "Seven", // TODO: make 7 work
+        "stop_bits": "Two", // TODO: make 2 work
+        "flow_control": "Software",
+        "parity": "Even",
+    }));
+
+    let connect = result.unwrap();
+    use tokio_serial::*;
+    assert!(matches!(
+        connect.settings,
+        ModbusProto::Rtu {
+            ref tty,
+            baud_rate: 12800,
+            data_bits: DataBits::Seven,
+            stop_bits: StopBits::Two,
+            flow_control: FlowControl::Software,
+            parity: Parity::Even,
+            ..
+        } if tty == "/dev/ttyUSB0"
+    ),);
+}
+
+#[test]
+fn parse_empty_register_parser_defaults() {
+    let empty = serde_json::from_value::<RegisterParse>(json!({}));
+    assert!(matches!(
+        empty.unwrap(),
+        RegisterParse {
+            swap_bytes: Swap(false),
+            swap_words: Swap(false),
+            value_type: RegisterValueType::Numeric {
+                of: RegisterNumeric::U16,
+                ..
+            }
+        }
+    ));
+}
+
+#[test]
+fn parse_register_parser_type() {
+    let result = serde_json::from_value::<RegisterParse>(json!({
+        "type": "s32"
+    }));
+    assert!(matches!(
+        result.unwrap().value_type,
+        RegisterValueType::Numeric {
+            of: RegisterNumeric::I32,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn parse_register_parser_array() {
+    let result = serde_json::from_value::<RegisterParse>(json!({
+        "type": "array",
+        "of": "s32",
+        "count": 10,
+    }));
+    let payload = result.unwrap();
+    // println!("{:?}", payload);
+    // println!("{}", serde_json::to_string_pretty(&payload).unwrap());
+
+    assert!(matches!(
+        payload.value_type,
+        RegisterValueType::Array(RegisterArray {
+            of: RegisterNumeric::I32,
+            count: 10,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn parse_register_parser_array_implicit_u16() {
+    let result = serde_json::from_value::<RegisterParse>(json!({
+        "type": "array",
+        "count": 10,
+    }));
+    let payload = result.unwrap();
+    // println!("{:?}", payload);
+    // println!("{}", serde_json::to_string_pretty(&payload).unwrap());
+
+    assert!(matches!(
+        payload.value_type,
+        RegisterValueType::Array(RegisterArray {
+            of: RegisterNumeric::U16,
+            count: 10,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn parse_register_parser_string() {
+    let result = serde_json::from_value::<RegisterParse>(json!({
+        "type": "string",
+        "length": 10,
+    }));
+    let payload = result.unwrap();
+    // println!("{:?}", payload);
+    // println!("{}", serde_json::to_string_pretty(&payload).unwrap());
+
+    assert!(matches!(
+        payload.value_type,
+        RegisterValueType::String(RegisterString { length: 10, .. })
+    ));
+}
+
+#[test]
+fn parse_register_parser_scale_etc() {
+    let result = serde_json::from_value::<RegisterParse>(json!({
+        "type": "s32",
+        "scale": -1,
+        "offset": 20,
+    }));
+    assert!(matches!(
+        result.unwrap().value_type,
+        RegisterValueType::Numeric {
+            of: RegisterNumeric::I32,
+            adjust: RegisterNumericAdjustment {
+                scale: -1,
+                offset: 20
+            }
+        }
+    ));
 }

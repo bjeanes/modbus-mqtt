@@ -396,13 +396,13 @@ async fn watch_registers(
 
                 let values = rx.await.unwrap().unwrap();
 
-                let swapped_values = if r.parse.swap_bytes {
+                let swapped_values = if r.parse.swap_bytes.0 {
                     values.iter().map(|v| v.swap_bytes()).collect()
                 } else {
                     values.clone()
                 };
 
-                let swapped_values = if r.parse.swap_words {
+                let swapped_values = if r.parse.swap_words.0 {
                     swapped_values
                         .chunks_exact(2)
                         .flat_map(|chunk| vec![chunk[1], chunk[0]])
@@ -416,29 +416,45 @@ async fn watch_registers(
                     .flat_map(|v| v.to_ne_bytes())
                     .collect();
 
-                use crate::modbus::config::RegisterFixedValueType::*;
-                use crate::modbus::config::RegisterValueType::*;
-                use crate::modbus::config::RegisterVariableValueType as Var;
+                use crate::modbus::config::RegisterValueType as T;
+                use crate::modbus::config::{RegisterArray, RegisterNumeric as N, RegisterString};
 
                 let value = match r.parse.value_type {
-                    Fixed(ref fixed) => match fixed {
-                        U8 => json!(bytes[1]), // or is it 0?
-                        U16 => json!(swapped_values[0]),
-                        U32 => json!(bytes.try_into().map(|bytes| u32::from_le_bytes(bytes)).ok()),
-                        U64 => json!(bytes.try_into().map(|bytes| u64::from_le_bytes(bytes)).ok()),
-                        I8 => json!(vec![bytes[1]]
+                    T::Numeric {
+                        ref of,
+                        adjust: ref _adjust,
+                    } => match of {
+                        N::U8 => json!(bytes[1]), // or is it 0?
+                        N::U16 => json!(swapped_values[0]),
+                        N::U32 => {
+                            json!(bytes.try_into().map(|bytes| u32::from_le_bytes(bytes)).ok())
+                        }
+                        N::U64 => {
+                            json!(bytes.try_into().map(|bytes| u64::from_le_bytes(bytes)).ok())
+                        }
+                        N::I8 => json!(vec![bytes[1]]
                             .try_into()
                             .map(|bytes| i8::from_le_bytes(bytes))),
-                        I16 => json!(bytes.try_into().map(|bytes| i16::from_le_bytes(bytes)).ok()),
-                        I32 => json!(bytes.try_into().map(|bytes| i32::from_le_bytes(bytes)).ok()),
-                        I64 => json!(bytes.try_into().map(|bytes| i64::from_le_bytes(bytes)).ok()),
-                        F32 => json!(bytes.try_into().map(|bytes| f32::from_le_bytes(bytes)).ok()),
-                        F64 => json!(bytes.try_into().map(|bytes| f64::from_le_bytes(bytes)).ok()),
+                        N::I16 => {
+                            json!(bytes.try_into().map(|bytes| i16::from_le_bytes(bytes)).ok())
+                        }
+                        N::I32 => {
+                            json!(bytes.try_into().map(|bytes| i32::from_le_bytes(bytes)).ok())
+                        }
+                        N::I64 => {
+                            json!(bytes.try_into().map(|bytes| i64::from_le_bytes(bytes)).ok())
+                        }
+                        N::F32 => {
+                            json!(bytes.try_into().map(|bytes| f32::from_le_bytes(bytes)).ok())
+                        }
+                        N::F64 => {
+                            json!(bytes.try_into().map(|bytes| f64::from_le_bytes(bytes)).ok())
+                        }
                     },
-                    Variable(ref var, _count) => match var {
-                        Var::String => json!(String::from_utf16_lossy(&swapped_values)),
-                        Var::Array(_) => todo!(),
-                    },
+                    T::String(RegisterString { .. }) => {
+                        json!(String::from_utf16_lossy(&swapped_values))
+                    }
+                    T::Array(RegisterArray { .. }) => todo!(),
                 };
 
                 let payload = serde_json::to_vec(
