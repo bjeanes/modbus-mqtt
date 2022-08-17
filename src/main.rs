@@ -4,7 +4,7 @@ use serde_json::json;
 use std::{collections::HashMap, time::Duration};
 use tokio::{sync::mpsc, sync::oneshot, time::MissedTickBehavior};
 use tokio_modbus::prelude::*;
-use tracing::{debug, error, info, span, warn, Level};
+use tracing::{debug, error, info};
 
 use clap::Parser;
 
@@ -44,8 +44,8 @@ async fn main() {
 
     let args = Cli::parse();
 
-    let (registry_tx, mut registry_rx) = mpsc::channel::<RegistryCommand>(32);
-    let (dispatcher_tx, mut dispatcher_rx) = mpsc::channel::<DispatchCommand>(32);
+    let (registry_tx, registry_rx) = mpsc::channel::<RegistryCommand>(32);
+    let (dispatcher_tx, dispatcher_rx) = mpsc::channel::<DispatchCommand>(32);
 
     // Modbus connection registry
     let registry_handle = {
@@ -86,7 +86,7 @@ async fn mqtt_dispatcher(
     info!("Connecting to MQTT broker...");
 
     options.set_last_will(LastWill {
-        topic: format!("{}/status", prefix).to_string(),
+        topic: format!("{}/status", prefix),
         message: serde_json::to_vec(&json!({
             "status": MainStatus::Stopped,
         }))
@@ -100,7 +100,7 @@ async fn mqtt_dispatcher(
 
     client
         .publish(
-            format!("{}/status", prefix).to_string(),
+            format!("{}/status", prefix),
             QoS::AtMostOnce,
             false,
             serde_json::to_vec(&json!({
@@ -344,7 +344,7 @@ async fn handle_connect(
                     topic: format!("{}/status/{}", topic_prefix, id),
                     payload: serde_json::to_vec(&json!({
                         "status": ConnectState::Errored,
-                        "error": format!("Invalid config: {}", err.to_string()),
+                        "error": format!("Invalid config: {}", err),
                     }))
                     .unwrap(),
                 })
@@ -396,7 +396,7 @@ async fn watch_registers(
 
                 let swapped_words = r.apply_swaps(&words);
 
-                let value = r.from_words(&swapped_words);
+                let value = r.parse_words(&swapped_words);
 
                 debug!(
                     name = r.name.as_ref().unwrap_or(&"".to_string()),
@@ -420,7 +420,7 @@ async fn watch_registers(
                     dispatcher
                         .send(DispatchCommand::Publish {
                             topic: format!("{}/{}", registers_prefix, name),
-                            payload: payload,
+                            payload,
                         })
                         .await
                         .unwrap();

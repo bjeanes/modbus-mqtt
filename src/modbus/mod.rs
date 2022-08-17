@@ -1,8 +1,6 @@
 use rust_decimal::{prelude::FromPrimitive, Decimal};
 use serde::Serialize;
 
-use crate::modbus::config::RegisterNumericAdjustment;
-
 use self::config::{Register, RegisterValueType};
 
 pub mod config;
@@ -26,7 +24,7 @@ pub type UnitId = tokio_modbus::prelude::SlaveId;
 pub type Unit = tokio_modbus::prelude::Slave;
 
 impl RegisterValueType {
-    pub fn from_words(&self, words: &[u16]) -> serde_json::Value {
+    pub fn parse_words(&self, words: &[u16]) -> serde_json::Value {
         use self::config::RegisterValueType as T;
         use self::config::{RegisterArray, RegisterNumeric as N, RegisterString};
         use serde_json::json;
@@ -96,7 +94,7 @@ impl RegisterValueType {
                 }
             }
             T::String(RegisterString { .. }) => {
-                json!(String::from_utf16_lossy(&words))
+                json!(String::from_utf16_lossy(words))
             }
             T::Array(RegisterArray { .. }) => todo!(),
         }
@@ -104,8 +102,8 @@ impl RegisterValueType {
 }
 
 impl Register {
-    pub fn from_words(&self, words: &[u16]) -> serde_json::Value {
-        self.parse.value_type.from_words(words)
+    pub fn parse_words(&self, words: &[u16]) -> serde_json::Value {
+        self.parse.value_type.parse_words(words)
     }
 
     pub fn apply_swaps(&self, words: &[u16]) -> Vec<u16> {
@@ -148,5 +146,5 @@ fn test_parse_1() {
         },
     };
 
-    assert_eq!(reg.from_words(&vec![843, 0]), json!(843));
+    assert_eq!(reg.parse_words(&vec![843, 0]), json!(843));
 }

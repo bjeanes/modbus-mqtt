@@ -53,21 +53,12 @@ fn default_modbus_parity() -> tokio_serial::Parity {
     tokio_serial::Parity::None
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase", default)]
 pub struct RegisterNumericAdjustment {
     pub scale: i8, // powers of 10 (0 = no adjustment, 1 = x10, -1 = /10)
     pub offset: i8,
     // precision: Option<u8>,
-}
-
-impl Default for RegisterNumericAdjustment {
-    fn default() -> Self {
-        Self {
-            scale: 0,
-            offset: 0,
-        }
-    }
 }
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
@@ -185,15 +176,9 @@ impl RegisterValueType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Swap(pub bool);
-
-impl Default for Swap {
-    fn default() -> Self {
-        Self(false)
-    }
-}
 
 trait IsDefault {
     fn is_default(&self) -> bool;
