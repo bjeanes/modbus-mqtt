@@ -123,7 +123,8 @@ impl Register {
         }
     }
 }
-
+#[cfg(test)]
+use pretty_assertions::{assert_eq, assert_ne};
 #[test]
 fn test_parse_1() {
     use self::config::{RegisterParse, Swap};

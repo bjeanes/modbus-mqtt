@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 #[cfg(test)]
+use pretty_assertions::{assert_eq, assert_ne};
+#[cfg(test)]
 use serde_json::json;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
