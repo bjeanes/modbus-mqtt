@@ -2,7 +2,7 @@ use rumqttc::{self, AsyncClient, Event, Incoming, LastWill, MqttOptions, Publish
 use serde::Serialize;
 use serde_json::json;
 use std::{collections::HashMap, time::Duration};
-use tokio::{sync::mpsc, sync::oneshot, time::MissedTickBehavior};
+use tokio::{select, sync::mpsc, sync::oneshot, time::MissedTickBehavior};
 use tokio_modbus::prelude::*;
 use tracing::{debug, error, info};
 
@@ -38,7 +38,7 @@ enum MainStatus {
     Stopped,
 }
 
-#[tokio::main(worker_threads = 1)]
+#[tokio::main(worker_threads = 3)]
 async fn main() {
     tracing_subscriber::fmt::init();
 
@@ -243,6 +243,11 @@ async fn handle_connect(
             let unit = connect.unit;
 
             let mut modbus = match connect.settings {
+                ModbusProto::SungrowWiNetS { ref host } => {
+                    modbus::sungrow::winets::connect_slave(host, unit)
+                        .await
+                        .unwrap()
+                }
                 ModbusProto::Tcp { ref host, port } => {
                     let socket_addr = format!("{}:{}", host, port).parse().unwrap();
                     tcp::connect_slave(socket_addr, unit).await.unwrap()
@@ -392,7 +397,16 @@ async fn watch_registers(
                     .await
                     .unwrap();
 
-                let words = rx.await.unwrap().unwrap();
+                // FIXME: definitely getting errors here that need to be handled
+                //
+                // thread 'tokio-runtime-worker' panicked at 'called `Result::unwrap()` on an `Err` value: Error { kind: UnexpectedEof, message: "failed to fill whole buffer" }'
+                // thread 'tokio-runtime-worker' panicked at 'called `Result::unwrap()` on an `Err` value: Custom { kind: InvalidData, error: "Invalid data length: 0" }'
+                // thread 'tokio-runtime-worker' panicked at 'called `Result::unwrap()` on an `Err` value: Os { code: 36, kind: Uncategorized, message: "Operation now in progress" }'
+                // thread 'tokio-runtime-worker' panicked at 'called `Result::unwrap()` on an `Err` value: Os { code: 35, kind: WouldBlock, message: "Resource temporarily unavailable" }
+                //
+                // Splitting out the two awaits so I can see if all of the above panics come from the same await or some from one vs the other:
+                let response = rx.await.unwrap(); // await may have errorer on receiving
+                let words = response.unwrap(); // received message is also a result which may be a (presumably Modbus?) error
 
                 let swapped_words = r.apply_swaps(&words);
 

@@ -4,6 +4,7 @@ use serde::Serialize;
 use self::config::{Register, RegisterValueType};
 
 pub mod config;
+pub mod sungrow;
 
 #[derive(Serialize)]
 #[serde(rename_all = "lowercase")]

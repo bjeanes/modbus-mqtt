@@ -7,7 +7,7 @@ use pretty_assertions::{assert_eq, assert_ne};
 use serde_json::json;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(untagged)]
+#[serde(tag = "proto", rename_all = "lowercase")]
 pub enum ModbusProto {
     Tcp {
         host: String,
@@ -33,6 +33,8 @@ pub enum ModbusProto {
         #[serde(default = "default_modbus_parity")]
         parity: tokio_serial::Parity,
     },
+    #[serde(rename = "winet-s")]
+    SungrowWiNetS { host: String },
 }
 
 fn default_modbus_port() -> u16 {
