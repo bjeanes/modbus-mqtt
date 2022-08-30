@@ -208,7 +208,7 @@ pub struct RegisterParse {
     pub value_type: RegisterValueType,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Register {
     pub address: u16,
 

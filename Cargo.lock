@@ -33,6 +33,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "android_system_properties"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7ed72e1635e121ca3e79420540282af22da58be50de153d36f81ddc6b83aa9e"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "ansi_term"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -88,6 +97,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
+name = "bitmask-enum"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76487de46597d345d040a1be49a6fb636b71d0abab4696b7f3492e0cd4639c73"
+dependencies = [
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "block-buffer"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -125,6 +144,18 @@ name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
+
+[[package]]
+name = "chrono"
+version = "0.4.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bfd4d1b31faaa3a89d7934dbded3111da0d2ef28e3ebccdb4f0179f5929d1ef1"
+dependencies = [
+ "iana-time-zone",
+ "num-integer",
+ "num-traits",
+ "winapi",
+]
 
 [[package]]
 name = "clap"
@@ -497,16 +528,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "hyper-rustls"
-version = "0.23.0"
+name = "iana-time-zone"
+version = "0.1.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d87c48c02e0dc5e3b849a2041db3029fd066650f8f717c07bf8ed78ccb895cac"
+checksum = "ad2bfd338099682614d3ee3fe0cd72e0b6a41ca6a87f6a74a3bd593c91650501"
 dependencies = [
- "http",
- "hyper",
- "rustls",
- "tokio",
- "tokio-rustls",
+ "android_system_properties",
+ "core-foundation-sys",
+ "js-sys",
+ "wasm-bindgen",
+ "winapi",
 ]
 
 [[package]]
@@ -519,6 +550,12 @@ dependencies = [
  "unicode-bidi",
  "unicode-normalization",
 ]
+
+[[package]]
+name = "if_chain"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb56e1aa765b4b4f3aadfab769793b7087bb03a4ea4920644a6d238e2df5b9ed"
 
 [[package]]
 name = "indexmap"
@@ -685,14 +722,11 @@ dependencies = [
 name = "modbus-mqtt"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "bytes",
  "clap",
- "futures-util",
  "humantime-serde",
  "itertools",
  "pretty_assertions",
- "reqwest",
  "rumqttc",
  "rust_decimal",
  "serde",
@@ -701,7 +735,7 @@ dependencies = [
  "tokio",
  "tokio-modbus",
  "tokio-serial",
- "tokio-tungstenite",
+ "tokio_modbus-winets",
  "tracing",
  "tracing-subscriber",
  "uuid",
@@ -738,6 +772,16 @@ dependencies = [
  "bitflags",
  "cfg-if",
  "libc",
+]
+
+[[package]]
+name = "num-integer"
+version = "0.1.45"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "225d3389fb3509a24c93f5c29eb6bde2586b98d9f016636dff58d7c6f7569cd9"
+dependencies = [
+ "autocfg",
+ "num-traits",
 ]
 
 [[package]]
@@ -958,7 +1002,6 @@ dependencies = [
  "http",
  "http-body",
  "hyper",
- "hyper-rustls",
  "ipnet",
  "js-sys",
  "lazy_static",
@@ -966,14 +1009,10 @@ dependencies = [
  "mime",
  "percent-encoding",
  "pin-project-lite",
- "rustls",
- "rustls-native-certs",
- "rustls-pemfile 1.0.1",
  "serde",
  "serde_json",
  "serde_urlencoded",
  "tokio",
- "tokio-rustls",
  "tower-service",
  "url",
  "wasm-bindgen",
@@ -1134,6 +1173,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde-aux"
+version = "3.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0a77223b653fa95f3f9864f3eb25b93e4ed170687eb42d85b6b98af21d5e1de"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "serde_derive"
 version = "1.0.144"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1250,6 +1300,25 @@ name = "strsim"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
+
+[[package]]
+name = "sungrow-winets"
+version = "0.1.0"
+dependencies = [
+ "bitmask-enum",
+ "futures-util",
+ "if_chain",
+ "reqwest",
+ "serde",
+ "serde-aux",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+ "tracing-subscriber",
+ "tungstenite",
+]
 
 [[package]]
 name = "syn"
@@ -1400,12 +1469,8 @@ checksum = "f714dd15bead90401d77e04243611caec13726c2408afd5b31901dfcdcb3b181"
 dependencies = [
  "futures-util",
  "log",
- "rustls",
- "rustls-native-certs",
  "tokio",
- "tokio-rustls",
  "tungstenite",
- "webpki",
 ]
 
 [[package]]
@@ -1419,6 +1484,16 @@ dependencies = [
  "futures-sink",
  "pin-project-lite",
  "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "tokio_modbus-winets"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "sungrow-winets",
+ "tokio-modbus",
  "tracing",
 ]
 
@@ -1505,12 +1580,10 @@ dependencies = [
  "httparse",
  "log",
  "rand",
- "rustls",
  "sha-1",
  "thiserror",
  "url",
  "utf-8",
- "webpki",
 ]
 
 [[package]]

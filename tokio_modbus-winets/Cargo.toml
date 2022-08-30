@@ -1,0 +1,11 @@
+[package]
+name = "tokio_modbus-winets"
+version = "0.1.0"
+edition = "2021"
+authors = ["Bo Jeanes <me@bjeanes.com>"]
+
+[dependencies]
+async-trait = "0.1.57"
+sungrow-winets = { path = "../sungrow-winets" }
+tokio-modbus = { version = "0.5.3", features = [] }
+tracing = "0.1.36"

@@ -2,7 +2,7 @@ use rumqttc::{self, AsyncClient, Event, Incoming, LastWill, MqttOptions, Publish
 use serde::Serialize;
 use serde_json::json;
 use std::{collections::HashMap, time::Duration};
-use tokio::{select, sync::mpsc, sync::oneshot, time::MissedTickBehavior};
+use tokio::{sync::mpsc, sync::oneshot, time::MissedTickBehavior};
 use tokio_modbus::prelude::*;
 use tracing::{debug, error, info};
 
@@ -77,6 +77,7 @@ async fn main() {
 enum DispatchCommand {
     Publish { topic: String, payload: Vec<u8> },
 }
+#[tracing::instrument(level = "debug")]
 async fn mqtt_dispatcher(
     mut options: MqttOptions,
     prefix: String,
@@ -179,6 +180,7 @@ enum RegistryCommand {
 
 type RegistryDb = HashMap<ConnectionId, tokio::task::JoinHandle<()>>;
 
+#[tracing::instrument(level = "debug")]
 async fn connection_registry(
     prefix: String,
     dispatcher: mpsc::Sender<DispatchCommand>,
@@ -244,7 +246,7 @@ async fn handle_connect(
 
             let mut modbus = match connect.settings {
                 ModbusProto::SungrowWiNetS { ref host } => {
-                    modbus::sungrow::winets::connect_slave(host, unit)
+                    tokio_modbus_winets::connect_slave(host, unit)
                         .await
                         .unwrap()
                 }
@@ -359,6 +361,7 @@ async fn handle_connect(
     }
 }
 
+#[tracing::instrument(level = "debug")]
 async fn watch_registers(
     read_type: ModbusReadType,
     address_offset: i8,
