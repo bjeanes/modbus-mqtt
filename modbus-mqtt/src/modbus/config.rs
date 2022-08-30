@@ -2,8 +2,6 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 #[cfg(test)]
-use pretty_assertions::{assert_eq, assert_ne};
-#[cfg(test)]
 use serde_json::json;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -57,7 +55,7 @@ fn default_modbus_parity() -> tokio_serial::Parity {
     tokio_serial::Parity::None
 }
 
-#[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase", default)]
 pub struct RegisterNumericAdjustment {
     pub scale: i8, // powers of 10 (0 = no adjustment, 1 = x10, -1 = /10)
@@ -65,7 +63,7 @@ pub struct RegisterNumericAdjustment {
     // precision: Option<u8>,
 }
 
-#[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum RegisterNumeric {
     U8,
@@ -105,13 +103,13 @@ impl RegisterNumeric {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename = "string")]
 pub struct RegisterString {
     length: u8,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename = "array")]
 pub struct RegisterArray {
     count: u8,
@@ -134,7 +132,7 @@ impl Default for RegisterArray {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum RegisterValueType {
     Numeric {
@@ -180,7 +178,7 @@ impl RegisterValueType {
     }
 }
 
-#[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Swap(pub bool);
 

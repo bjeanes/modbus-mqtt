@@ -124,7 +124,7 @@ impl Register {
     }
 }
 #[cfg(test)]
-use pretty_assertions::{assert_eq, assert_ne};
+use pretty_assertions::assert_eq;
 #[test]
 fn test_parse_1() {
     use self::config::{RegisterParse, Swap};
@@ -147,5 +147,5 @@ fn test_parse_1() {
         },
     };
 
-    assert_eq!(reg.parse_words(&vec![843, 0]), json!(843));
+    assert_eq!(reg.parse_words(&[843, 0]), json!(843));
 }

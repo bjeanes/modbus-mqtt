@@ -2,7 +2,7 @@ use serde::Deserialize;
 use serde_aux::prelude::*;
 use thiserror::Error;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error};
 
 #[derive(Error, Debug)]
 #[non_exhaustive]

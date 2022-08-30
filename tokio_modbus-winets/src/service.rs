@@ -4,7 +4,6 @@ use tokio_modbus::{
     prelude::{Client, Request, Response},
     slave::{Slave, SlaveContext},
 };
-use tracing::{debug, error, info};
 
 pub(crate) async fn connect_slave<H>(host: H, _slave: Slave) -> Result<Context, Error>
 where
