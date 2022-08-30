@@ -139,7 +139,7 @@ fn test_parse_1() {
             swap_words: Swap(false),
             value_type: RegisterValueType::Numeric {
                 of: config::RegisterNumeric::I32,
-                adjust: RegisterNumericAdjustment {
+                adjust: config::RegisterNumericAdjustment {
                     scale: 0,
                     offset: 0,
                 },

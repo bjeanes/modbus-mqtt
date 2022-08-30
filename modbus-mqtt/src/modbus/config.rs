@@ -264,6 +264,7 @@ fn default_address_offset() -> i8 {
 #[test]
 fn parse_minimal_tcp_connect_config() {
     let result = serde_json::from_value::<Connect>(json!({
+        "proto": "tcp",
         "host": "1.1.1.1"
     }));
 
@@ -280,6 +281,7 @@ fn parse_minimal_tcp_connect_config() {
 #[test]
 fn parse_full_tcp_connect_config() {
     let _ = serde_json::from_value::<Connect>(json!({
+        "proto": "tcp",
         "host": "10.10.10.219",
         "unit": 1,
         "address_offset": -1,
@@ -346,6 +348,7 @@ fn parse_full_tcp_connect_config() {
 #[test]
 fn parse_minimal_rtu_connect_config() {
     let result = serde_json::from_value::<Connect>(json!({
+        "proto": "rtu",
         "tty": "/dev/ttyUSB0",
         "baud_rate": 9600,
     }));
@@ -369,6 +372,7 @@ fn parse_minimal_rtu_connect_config() {
 #[test]
 fn parse_complete_rtu_connect_config() {
     let result = serde_json::from_value::<Connect>(json!({
+        "proto": "rtu",
         "tty": "/dev/ttyUSB0",
         "baud_rate": 12800,
 
