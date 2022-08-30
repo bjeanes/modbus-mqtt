@@ -194,7 +194,7 @@ where
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct RegisterParse {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub swap_bytes: Swap,
