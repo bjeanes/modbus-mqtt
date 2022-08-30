@@ -11,6 +11,6 @@ repository = "https://github.com/bjeanes/modbus-mqtt"
 
 [dependencies]
 async-trait = "0.1.57"
-sungrow-winets = { path = "../sungrow-winets" }
+sungrow-winets = { version = "0.1.0", path = "../sungrow-winets" }
 tokio-modbus = { version = "0.5.3", features = [] }
 tracing = "0.1.36"
