@@ -3,7 +3,12 @@ name = "modbus-mqtt"
 version = "0.1.0"
 edition = "2021"
 authors = ["Bo Jeanes <me@bjeanes.com>"]
-default-run = "modbus-mqtt"
+description = "A bridge between Modbus devices and MQTT"
+keywords = ["modbus", "mqtt", "sungrow"]
+categories = ["network-programming", "command-line-utilities"]
+homepage = "https://github.com/bjeanes/modbus-mqtt/tree/main/modbus-mqtt"
+repository = "https://github.com/bjeanes/modbus-mqtt"
+license = "MIT"
 
 [dependencies]
 bytes = "1.1.0"

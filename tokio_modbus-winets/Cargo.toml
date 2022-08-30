@@ -3,6 +3,11 @@ name = "tokio_modbus-winets"
 version = "0.1.0"
 edition = "2021"
 authors = ["Bo Jeanes <me@bjeanes.com>"]
+license = "MIT"
+keywords = ["tokio_modbus", "modbus", "sungrow"]
+description = "Teaches tokio_modbus to query Modbus registers over HTTP for Sungrow inverters using WiNet-S network dongle."
+homepage = "https://github.com/bjeanes/modbus-mqtt/tree/main/tokio_modbus-winets"
+repository = "https://github.com/bjeanes/modbus-mqtt"
 
 [dependencies]
 async-trait = "0.1.57"
