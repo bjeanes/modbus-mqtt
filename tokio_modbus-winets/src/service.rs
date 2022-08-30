@@ -17,14 +17,13 @@ where
 #[derive(Debug)]
 pub struct Context {
     // unit: Slave,
-    host: String,
     service: sungrow_winets::Client,
 }
 
 impl Context {
     async fn new(host: String) -> Result<Self, Error> {
         let service = sungrow_winets::Client::new(&host).await?;
-        Ok(Self { host, service })
+        Ok(Self { service })
     }
 }
 
