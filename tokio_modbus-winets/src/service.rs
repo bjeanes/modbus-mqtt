@@ -11,7 +11,7 @@ where
     H: Into<String>,
 {
     let host: String = host.into();
-    Ok(Context::new(host).await?)
+    Context::new(host).await
 }
 
 #[derive(Debug)]
