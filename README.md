@@ -1,34 +1,14 @@
 # ModbusMQTT
 
-Very rough for now.
+A bridge between Modbus devices and MQTT.
 
-## Topic spec
+It is early days, but the plan is:
 
-```
-prefix/status -> { "status": "running" } # last-will message here too
+* Support custom Modbus protocols (Sungrow WiNet-S has been implemented)
+* Support _setting_ holding registers over MQTT
+* Support optional auto-configuration of Home Assistant entities, including using [MQTT Number](https://www.home-assistant.io/integrations/number.mqtt/) et al for holding registers, to allow setting the value.
 
-prefix/connect/<connection> <- {
-        "host": "localhost",
-        "port": 502,
-        "slave": 1,
-    }
 
-prefix/status/<connection> -> {
-        "host": "localhost",
-        "port": 502,
-        "slave": 1,
-        "status": "connected"
-    }
-
-prefix/logs/<connection> -> { "message": "log message", level: "level" }
-
-prefix/connection/<connection>/monitor[/opt-name] <- {
-        "address": 5100,
-        "type": "holding|input",
-        "count": 1,
-        "interval": 10, // seconds
-}
-```
 
 ## Similar projects
 
