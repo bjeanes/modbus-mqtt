@@ -20,13 +20,13 @@ rust_decimal = { version = "1.26.1", features = ["serde-arbitrary-precision", "s
 serde = { version = "1.0.139", features = ["serde_derive"] }
 serde_json = "1.0.82"
 serialport = { version = "4.2.0", features = ["serde"] }
+thiserror = "1.0.33"
 tokio = { version = "1.20.0", features = ["rt", "rt-multi-thread", "time"] }
 tokio-modbus = "0.5.3"
 tokio-serial = "5.4.3"
 tokio_modbus-winets = { version = "0.1.0", path = "../tokio_modbus-winets" }
 tracing = "0.1.36"
 tracing-subscriber = "0.3.15"
-uuid = { version = "1.1.2", features = ["v4", "serde"] }
 
 [dev-dependencies]
 pretty_assertions = "1.2.1"

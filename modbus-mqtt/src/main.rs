@@ -6,9 +6,23 @@ use tokio::{sync::mpsc, sync::oneshot, time::MissedTickBehavior};
 use tokio_modbus::prelude::*;
 use tracing::{debug, error, info};
 
+use thiserror::Error;
+
 use clap::Parser;
 
 mod modbus;
+
+#[derive(Error, Debug)]
+#[non_exhaustive]
+pub enum Error {
+    #[error(transparent)]
+    IOError(#[from] std::io::Error),
+
+    #[error("Unknown")]
+    Unknown,
+}
+
+type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Parser)]
 struct Cli {
@@ -39,7 +53,7 @@ enum MainStatus {
 }
 
 #[tokio::main(worker_threads = 3)]
-async fn main() {
+async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
     let args = Cli::parse();
@@ -71,6 +85,7 @@ async fn main() {
 
     registry_handle.await.unwrap();
     dispatcher_handle.await.unwrap();
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -228,7 +243,7 @@ enum ModbusCommand {
     Write(u16, Vec<u16>, ModbusResponse),
 }
 
-type ModbusResponse = oneshot::Sender<Result<Vec<u16>, std::io::Error>>;
+type ModbusResponse = oneshot::Sender<Result<Vec<u16>>>;
 
 #[tracing::instrument(level = "debug")]
 async fn handle_connect(
@@ -297,7 +312,7 @@ async fn handle_connect(
                                 }
                             };
 
-                            responder.send(response.await).unwrap();
+                            responder.send(response.await.map_err(Into::into)).unwrap();
                         }
                         ModbusCommand::Write(address, data, responder) => {
                             responder
@@ -309,7 +324,8 @@ async fn handle_connect(
                                             address,
                                             &data[..],
                                         )
-                                        .await,
+                                        .await
+                                        .map_err(Into::into),
                                 )
                                 .unwrap();
                         }
