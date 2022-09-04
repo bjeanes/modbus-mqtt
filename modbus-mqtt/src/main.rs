@@ -8,8 +8,6 @@ use tracing::{debug, error, info};
 
 use thiserror::Error;
 
-use clap::Parser;
-
 mod modbus;
 
 #[derive(Error, Debug)]
@@ -24,7 +22,13 @@ pub enum Error {
 
 type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Parser)]
+#[derive(clap::Parser)]
+#[clap(
+    name = "modbus-mqtt",
+    version,
+    author,
+    about = "A bridge between Modbus and MQTT"
+)]
 struct Cli {
     mqtt_host: String,
 
@@ -56,6 +60,7 @@ enum MainStatus {
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
+    use clap::Parser;
     let args = Cli::parse();
 
     let (registry_tx, registry_rx) = mpsc::channel::<RegistryCommand>(32);
