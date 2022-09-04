@@ -14,6 +14,7 @@ It is early days, but the plan is:
 
 * https://github.com/Instathings/modbus2mqtt
 * https://github.com/TenySmart/ModbusTCP2MQTT - Sungrow inverter specific
+* https://github.com/bohdan-s/SunGather - Sungrow inverter specific
 
 ## Example connect config
 
