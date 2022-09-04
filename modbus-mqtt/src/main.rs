@@ -259,16 +259,19 @@ async fn handle_connect(
         Ok(connect) => {
             let unit = connect.unit;
 
-            let mut modbus = match connect.settings {
+            let mut modbus: tokio_modbus::client::Context = match connect.settings {
+                #[cfg(feature = "winet-s")]
                 ModbusProto::SungrowWiNetS { ref host } => {
                     tokio_modbus_winets::connect_slave(host, unit)
                         .await
                         .unwrap()
                 }
+                #[cfg(feature = "tcp")]
                 ModbusProto::Tcp { ref host, port } => {
                     let socket_addr = format!("{}:{}", host, port).parse().unwrap();
                     tcp::connect_slave(socket_addr, unit).await.unwrap()
                 }
+                #[cfg(feature = "rtu")]
                 ModbusProto::Rtu {
                     ref tty,
                     baud_rate,
@@ -284,6 +287,10 @@ async fn handle_connect(
                         .stop_bits(stop_bits);
                     let port = tokio_serial::SerialStream::open(&builder).unwrap();
                     rtu::connect_slave(port, unit).await.unwrap()
+                }
+                ModbusProto::Unknown => {
+                    error!("Unrecognised protocol");
+                    return;
                 }
             };
             let status = modbus::ConnectStatus {

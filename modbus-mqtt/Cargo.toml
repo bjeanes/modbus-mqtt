@@ -19,14 +19,20 @@ rumqttc = "0.15.0"
 rust_decimal = { version = "1.26.1", features = ["serde-arbitrary-precision", "serde-float", "serde_json", "maths"] }
 serde = { version = "1.0.139", features = ["serde_derive"] }
 serde_json = "1.0.82"
-serialport = { version = "4.2.0", features = ["serde"] }
+serialport = { version = "4.2.0", optional = true, features = ["serde"] }
 thiserror = "1.0.33"
 tokio = { version = "1.20.0", features = ["rt", "rt-multi-thread", "time"] }
-tokio-modbus = "0.5.3"
-tokio-serial = "5.4.3"
-tokio_modbus-winets = { version = "0.1.0", path = "../tokio_modbus-winets" }
+tokio-modbus = { version = "0.5.3", default-features = false }
+tokio-serial = { version = "5.4.3", optional = true }
+tokio_modbus-winets = { version = "0.1.0", path = "../tokio_modbus-winets", optional = true, default-features = false }
 tracing = "0.1.36"
 tracing-subscriber = "0.3.15"
 
 [dev-dependencies]
 pretty_assertions = "1.2.1"
+
+[features]
+default = ["tcp", "rtu", "winet-s"]
+tcp = ["tokio-modbus/tcp"]
+rtu = ["tokio-modbus/rtu", "dep:tokio-serial", "dep:serialport"]
+winet-s = ["dep:tokio_modbus-winets"]

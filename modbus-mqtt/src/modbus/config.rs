@@ -7,12 +7,14 @@ use serde_json::json;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "proto", rename_all = "lowercase")]
 pub enum ModbusProto {
+    #[cfg(feature = "tcp")]
     Tcp {
         host: String,
 
         #[serde(default = "default_modbus_port")]
         port: u16,
     },
+    #[cfg(feature = "rtu")]
     #[serde(rename_all = "lowercase")]
     Rtu {
         // tty: std::path::PathBuf,
@@ -31,26 +33,35 @@ pub enum ModbusProto {
         #[serde(default = "default_modbus_parity")]
         parity: tokio_serial::Parity,
     },
+    #[cfg(feature = "winet-s")]
     #[serde(rename = "winet-s")]
     SungrowWiNetS { host: String },
+
+    // Predominantly for if the binary is compiled with no default features for some reason.
+    #[serde(other)]
+    Unknown,
 }
 
 fn default_modbus_port() -> u16 {
     502
 }
 
+#[cfg(feature = "rtu")]
 fn default_modbus_data_bits() -> tokio_serial::DataBits {
     tokio_serial::DataBits::Eight
 }
 
+#[cfg(feature = "rtu")]
 fn default_modbus_stop_bits() -> tokio_serial::StopBits {
     tokio_serial::StopBits::One
 }
 
+#[cfg(feature = "rtu")]
 fn default_modbus_flow_control() -> tokio_serial::FlowControl {
     tokio_serial::FlowControl::None
 }
 
+#[cfg(feature = "rtu")]
 fn default_modbus_parity() -> tokio_serial::Parity {
     tokio_serial::Parity::None
 }
