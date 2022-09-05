@@ -523,29 +523,18 @@ impl From<SungrowResult> for Result<()> {
 //
 // Modbus uses u16 "words" instead of bytes, and the data above should always represent this, so we can take groups
 // of 2 and consume them as a hex-represented u16.
-//
-// TODO: can be simpler once https://github.com/vityafx/serde-aux/issues/26 is resolved
 fn words_from_string<'de, D>(deserializer: D) -> std::result::Result<Vec<u16>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    StringOrVecToVec::with_separator(' ').into_deserializer()(deserializer).map(
-        |vec: Vec<String>| {
-            vec.chunks_exact(2)
-                .map(|chunk| {
-                    let bytes: [u8; 2] = chunk
-                        .iter()
-                        .map(|byte_str| {
-                            u8::from_str_radix(byte_str, 16).expect("API shouldn't return bad hex")
-                        })
-                        .collect::<Vec<u8>>()
-                        .try_into()
-                        .expect("we always have two elements, because of `chunks_exact`");
-                    u16::from_be_bytes(bytes)
-                })
-                .collect::<Vec<u16>>()
-        },
+    StringOrVecToVec::new(' ', |s| u8::from_str_radix(s, 16), true).into_deserializer()(
+        deserializer,
     )
+    .map(|vec| {
+        vec.chunks_exact(2)
+            .map(|bytes| u16::from_be_bytes(bytes.try_into().unwrap()))
+            .collect()
+    })
 }
 
 #[test]
@@ -562,29 +551,4 @@ fn test_words_from_string() {
         &a.list,
         &[0x00AA, 0x0001, 0x000D, 0x001E, 0x000F, 0x0000, 0x0055]
     );
-}
-
-#[test]
-#[ignore] // For a bug report in serde_aux: https://github.com/vityafx/serde-aux/issues/26
-fn test_bytes_from_string() {
-    fn bytes_from_string<'de, D>(deserializer: D) -> std::result::Result<Vec<u8>, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        StringOrVecToVec::new(' ', |s| {
-            println!("{:?}", &s);
-            u8::from_str_radix(s, 16)
-        })
-        .into_deserializer()(deserializer)
-    }
-
-    #[derive(serde::Deserialize, Debug)]
-    struct MyStruct {
-        #[serde(deserialize_with = "bytes_from_string")]
-        list: Vec<u8>,
-    }
-
-    let s = r#" { "list": "a1 b2 c3 d4 " } "#;
-    let a: MyStruct = serde_json::from_str(s).unwrap();
-    assert_eq!(&a.list, &[0xa1, 0xb2, 0xc3, 0xd4]);
 }
