@@ -4,6 +4,11 @@ use serde::Serialize;
 use self::config::{Register, RegisterValueType};
 
 pub mod config;
+pub mod connection;
+pub mod register;
+
+pub use connection::Connection;
+// pub use register::Register;
 
 #[derive(Serialize)]
 #[serde(rename_all = "lowercase")]

@@ -8,7 +8,13 @@ use tracing::{debug, error, info};
 
 use thiserror::Error;
 
-mod modbus;
+mod shutdown;
+pub(crate) use shutdown::Shutdown;
+
+pub mod homeassistant;
+pub mod modbus;
+pub mod mqtt;
+pub mod server;
 
 #[derive(Error, Debug)]
 #[non_exhaustive]
@@ -16,81 +22,37 @@ pub enum Error {
     #[error(transparent)]
     IOError(#[from] std::io::Error),
 
+    #[error("{0}")]
+    Other(std::borrow::Cow<'static, str>),
+
+    #[error(transparent)]
+    MQTTOptionError(#[from] rumqttc::OptionError),
+
+    #[error(transparent)]
+    MQTTClientError(#[from] rumqttc::ClientError),
+
     #[error("Unknown")]
     Unknown,
 }
 
-type Result<T> = std::result::Result<T, Error>;
-
-#[derive(clap::Parser)]
-#[clap(
-    name = "modbus-mqtt",
-    version,
-    author,
-    about = "A bridge between Modbus and MQTT"
-)]
-struct Cli {
-    mqtt_host: String,
-
-    #[clap(short = 'n', long, default_value = "modbus")]
-    mqtt_name: String,
-
-    #[clap(short = 'p', long, default_value_t = 1883)]
-    mqtt_port: u16,
-
-    #[clap(short = 'u', long, env = "MQTT_USER")]
-    mqtt_user: Option<String>,
-
-    #[clap(short = 'P', long, env)]
-    mqtt_password: Option<String>,
-
-    #[clap(short = 't', long, default_value = "modbus-mqtt")]
-    // Where to listen for commands
-    mqtt_topic_prefix: String,
+impl From<String> for Error {
+    fn from(s: String) -> Self {
+        Self::Other(s.into())
+    }
 }
+impl From<&'static str> for Error {
+    fn from(s: &'static str) -> Self {
+        Self::Other(s.into())
+    }
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Serialize)]
 #[serde(rename_all = "lowercase")]
 enum MainStatus {
     Running,
     Stopped,
-}
-
-#[tokio::main(worker_threads = 3)]
-async fn main() -> Result<()> {
-    tracing_subscriber::fmt::init();
-
-    use clap::Parser;
-    let args = Cli::parse();
-
-    let (registry_tx, registry_rx) = mpsc::channel::<RegistryCommand>(32);
-    let (dispatcher_tx, dispatcher_rx) = mpsc::channel::<DispatchCommand>(32);
-
-    // Modbus connection registry
-    let registry_handle = {
-        let prefix = args.mqtt_topic_prefix.clone();
-        tokio::spawn(connection_registry(prefix, dispatcher_tx, registry_rx))
-    };
-
-    // MQTT Dispatcher
-    let dispatcher_handle = {
-        let prefix = args.mqtt_topic_prefix.clone();
-        let mut options = MqttOptions::new(
-            env!("CARGO_PKG_NAME"),
-            args.mqtt_host.as_str(),
-            args.mqtt_port,
-        );
-        if let (Some(u), Some(p)) = (args.mqtt_user, args.mqtt_password) {
-            options.set_credentials(u, p);
-        }
-        options.set_keep_alive(Duration::from_secs(5)); // TODO: make this configurable
-
-        tokio::spawn(mqtt_dispatcher(options, prefix, registry_tx, dispatcher_rx))
-    };
-
-    registry_handle.await.unwrap();
-    dispatcher_handle.await.unwrap();
-    Ok(())
 }
 
 #[derive(Debug)]
