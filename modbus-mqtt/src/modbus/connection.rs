@@ -33,7 +33,7 @@ pub(crate) async fn run(
                     address_offset,
                     client,
                     mqtt: mqtt.clone(),
-                    shutdown,
+                    shutdown: shutdown.clone(), // Important, so that we can publish "disconnected" below
                     rx,
                     tx,
                 };
@@ -45,7 +45,8 @@ pub(crate) async fn run(
                 }
 
                 // we are shutting down here, so don't care if this fails
-                let _ = mqtt.publish("state", "disconnected").await;
+                let send = mqtt.publish("state", "disconnected").await;
+                debug!(?config, ?send, "shutting down modbus connection");
             }
             Err(error) => handle_tx.send(Err(error.into())).unwrap(),
         }

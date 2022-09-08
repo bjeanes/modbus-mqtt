@@ -1,4 +1,7 @@
-use crate::{modbus, mqtt};
+use crate::{
+    modbus,
+    mqtt::{self, Scopable},
+};
 
 use rumqttc::MqttOptions;
 use std::{future::Future, time::Duration};
@@ -18,26 +21,18 @@ pub async fn run<P: Into<String> + Send>(
     let (notify_shutdown, _) = broadcast::channel(1);
     let (shutdown_complete_tx, mut shutdown_complete_rx) = mpsc::channel(1);
 
-    // TODO: make sure mqtt connection is last thing to shutdown, so other components can send final messages.
     mqtt_options.set_last_will(rumqttc::LastWill {
         topic: prefix.clone(),
         message: "offline".into(),
         qos: rumqttc::QoS::AtMostOnce,
         retain: false,
     });
-    let mut mqtt_connection = mqtt::new(
-        mqtt_options,
-        (notify_shutdown.subscribe(), shutdown_complete_tx.clone()).into(),
-    )
-    .await;
-    mqtt_connection
-        .handle()
-        .publish(prefix.clone(), "online")
-        .await?;
-    let mqtt = mqtt_connection.prefixed_handle(prefix)?;
+    let mut mqtt_connection = mqtt::new(mqtt_options).await;
+    let mqtt = mqtt_connection.handle();
+    mqtt.publish(prefix.clone(), "online").await?;
 
     let mut connector = modbus::connector::new(
-        mqtt.clone(),
+        mqtt.scoped(prefix),
         (notify_shutdown.subscribe(), shutdown_complete_tx.clone()).into(),
     );
 
@@ -57,13 +52,9 @@ pub async fn run<P: Into<String> + Send>(
     drop(notify_shutdown);
     drop(shutdown_complete_tx);
 
-    timeout(Duration::from_secs(5), shutdown_complete_rx.recv())
-        .await
-        .map_err(|_| {
-            crate::Error::Other("Shutdown didn't complete within 5 seconds; aborting".into())
-        })?;
-
-    info!("Shutdown.");
+    // We want MQTT to be the last thing to shutdown, so it gets shutdown after everything else
+    shutdown_complete_rx.recv().await;
+    mqtt.shutdown().await?;
 
     Ok(())
 }

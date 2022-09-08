@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, future::Future};
 
 use bytes::Bytes;
 use rumqttc::{
@@ -10,8 +10,6 @@ use tokio::{
     sync::mpsc::{self, channel, Receiver, Sender},
 };
 use tracing::{debug, info, warn};
-
-use crate::shutdown::Shutdown;
 
 #[derive(Debug)]
 pub struct Payload {
@@ -26,7 +24,7 @@ pub enum Message {
     Shutdown,
 }
 
-pub(crate) async fn new(options: MqttOptions, shutdown: Shutdown) -> Connection {
+pub(crate) async fn new(options: MqttOptions) -> Connection {
     let (client, event_loop) = AsyncClient::new(options, 32);
 
     let (tx, rx) = channel(32);
@@ -36,7 +34,6 @@ pub(crate) async fn new(options: MqttOptions, shutdown: Shutdown) -> Connection 
         subscriptions: HashMap::new(),
         tx,
         rx,
-        shutdown,
     }
 }
 
@@ -48,7 +45,6 @@ pub(crate) struct Connection {
     rx: Receiver<Message>,
     client: AsyncClient,
     event_loop: EventLoop,
-    shutdown: Shutdown,
 }
 
 impl Connection {
@@ -61,13 +57,12 @@ impl Connection {
                 request = self.rx.recv() => {
                     match request {
                         None => return Ok(()),
-                        Some(Message::Shutdown) => return Ok(()),
+                        Some(Message::Shutdown) => {
+                            info!("MQTT connection shutting down");
+                            break;
+                        }
                         Some(req) => self.handle_request(req).await?,
                     }
-                }
-                _ = self.shutdown.recv() => {
-                    info!("MQTT connection shutting down");
-                    break;
                 }
             }
         }
@@ -222,6 +217,13 @@ impl Handle {
             .await
             .map_err(|_| crate::Error::SendError)?;
         Ok(())
+    }
+
+    pub async fn shutdown(self) -> crate::Result<()> {
+        self.tx
+            .send(Message::Shutdown)
+            .await
+            .map_err(|_| crate::Error::SendError)
     }
 }
 
