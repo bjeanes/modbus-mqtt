@@ -164,6 +164,9 @@ impl Connection {
                 for filter in &filters {
                     let channel = channel.clone();
 
+                    // NOTE: Curently allows multiple components to watch the same topic filter, but if there is no need
+                    // for this, it might make more sense to have it _replace_ the channel, so that old (stale)
+                    // components automatically finish running.
                     match self.subscriptions.get_mut(&filter.path) {
                         Some(channels) => channels.push(channel),
                         None => {

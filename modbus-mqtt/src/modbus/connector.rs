@@ -6,6 +6,10 @@ use serde_json::value::RawValue as RawJSON;
 use tokio::select;
 use tracing::{debug, error, info};
 
+/*
+NOTE: Should this be a connection _registry_ of sorts which also restarts connections which die?
+*/
+
 /// The topic filter under the prefix to look for connection configs
 const TOPIC: &str = "+/connect";
 
@@ -88,9 +92,9 @@ async fn connect(config: Config<'_>, mqtt: mqtt::Handle, shutdown: Shutdown) -> 
         holding,
     } = config;
 
-    mqtt.publish("state", "connecting").await?;
-
     let connection_handler = connection::run(settings, mqtt.clone(), shutdown).await?;
+
+    // TODO: consider waiting 1 second before sending the registers to MQTT, to ensure that the connection is listening.
 
     for reg in input {
         let mqtt = mqtt.scoped("input");
