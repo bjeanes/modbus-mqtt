@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
+use std::{ops::Add, time::Duration};
 
 #[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase", default)]
@@ -180,249 +180,245 @@ fn default_register_interval() -> Duration {
     Duration::from_secs(60)
 }
 
-// #[test]
-// fn parse_minimal_tcp_connect_config() {
-//     let result = serde_json::from_value::<Connect>(json!({
-//         "proto": "tcp",
-//         "host": "1.1.1.1"
-//     }));
+#[test]
+fn parse_empty_register_parser_defaults() {
+    use serde_json::json;
+    let empty = serde_json::from_value::<RegisterParse>(json!({}));
+    assert!(matches!(
+        empty.unwrap(),
+        RegisterParse {
+            swap_bytes: Swap(false),
+            swap_words: Swap(false),
+            value_type: RegisterValueType::Numeric {
+                of: RegisterNumeric::U16,
+                adjust: RegisterNumericAdjustment {
+                    scale: 0,
+                    offset: 0,
+                }
+            }
+        }
+    ));
+}
 
-//     let connect = result.unwrap();
-//     assert!(matches!(
-//         connect.settings,
-//         ModbusProto::Tcp {
-//             ref host,
-//             port: 502
-//         } if host == "1.1.1.1"
-//     ))
-// }
+#[test]
+fn parse_register_parser_type() {
+    use serde_json::json;
+    let result = serde_json::from_value::<RegisterParse>(json!({
+        "type": "s32"
+    }));
+    assert!(matches!(
+        result.unwrap().value_type,
+        RegisterValueType::Numeric {
+            of: RegisterNumeric::I32,
+            ..
+        }
+    ));
+}
 
-// #[test]
-// fn parse_full_tcp_connect_config() {
-//     let _ = serde_json::from_value::<Connect>(json!({
-//         "proto": "tcp",
-//         "host": "10.10.10.219",
-//         "unit": 1,
-//         "address_offset": -1,
-//         "input": [
-//             {
-//                 "address": 5017,
-//                 "type": "u32",
-//                 "name": "dc_power",
-//                 "swap_words": false,
-//                 "period": "3s"
-//             },
-//             {
-//                 "address": 5008,
-//                 "type": "s16",
-//                 "name": "internal_temperature",
-//                 "period": "1m"
-//             },
-//             {
-//                 "address": 13008,
-//                 "type": "s32",
-//                 "name": "load_power",
-//                 "swap_words": false,
-//                 "period": "3s"
-//             },
-//             {
-//                 "address": 13010,
-//                 "type": "s32",
-//                 "name": "export_power",
-//                 "swap_words": false,
-//                 "period": "3s"
-//             },
-//             {
-//                 "address": 13022,
-//                 "name": "battery_power",
-//                 "period": "3s"
-//             },
-//             {
-//                 "address": 13023,
-//                 "name": "battery_level",
-//                 "period": "1m"
-//             },
-//             {
-//                 "address": 13024,
-//                 "name": "battery_health",
-//                 "period": "10m"
-//             }
-//         ],
-//         "hold": [
-//             {
-//                 "address": 13058,
-//                 "name": "max_soc",
-//                 "period": "90s"
-//             },
-//             {
-//                 "address": 13059,
-//                 "name": "min_soc",
-//                 "period": "90s"
-//             }
-//         ]
-//     }))
-//     .unwrap();
-// }
+#[test]
+fn parse_register_parser_array() {
+    use serde_json::json;
+    let result = serde_json::from_value::<RegisterParse>(json!({
+        "type": "array",
+        "of": "s32",
+        "count": 10,
+    }));
+    let payload = result.unwrap();
+    // println!("{:?}", payload);
+    // println!("{}", serde_json::to_string_pretty(&payload).unwrap());
 
-// #[test]
-// fn parse_minimal_rtu_connect_config() {
-//     let result = serde_json::from_value::<Connect>(json!({
-//         "proto": "rtu",
-//         "tty": "/dev/ttyUSB0",
-//         "baud_rate": 9600,
-//     }));
+    assert!(matches!(
+        payload.value_type,
+        RegisterValueType::Array(RegisterArray {
+            of: RegisterNumeric::I32,
+            count: 10,
+            ..
+        })
+    ));
+}
 
-//     let connect = result.unwrap();
-//     use tokio_serial::*;
-//     assert!(matches!(
-//         connect.settings,
-//         ModbusProto::Rtu {
-//             ref tty,
-//             baud_rate: 9600,
-//             data_bits: DataBits::Eight,
-//             stop_bits: StopBits::One,
-//             flow_control: FlowControl::None,
-//             parity: Parity::None,
-//             ..
-//         } if tty == "/dev/ttyUSB0"
-//     ))
-// }
+#[test]
+fn parse_register_parser_array_implicit_u16() {
+    use serde_json::json;
+    let result = serde_json::from_value::<RegisterParse>(json!({
+        "type": "array",
+        "count": 10,
+    }));
+    let payload = result.unwrap();
+    // println!("{:?}", payload);
+    // println!("{}", serde_json::to_string_pretty(&payload).unwrap());
 
-// #[test]
-// fn parse_complete_rtu_connect_config() {
-//     let result = serde_json::from_value::<Connect>(json!({
-//         "proto": "rtu",
-//         "tty": "/dev/ttyUSB0",
-//         "baud_rate": 12800,
+    assert!(matches!(
+        payload.value_type,
+        RegisterValueType::Array(RegisterArray {
+            of: RegisterNumeric::U16,
+            count: 10,
+            ..
+        })
+    ));
+}
 
-//         // TODO: make lowercase words work
-//         "data_bits": "Seven", // TODO: make 7 work
-//         "stop_bits": "Two", // TODO: make 2 work
-//         "flow_control": "Software",
-//         "parity": "Even",
-//     }));
+#[test]
+fn parse_register_parser_string() {
+    use serde_json::json;
+    let result = serde_json::from_value::<RegisterParse>(json!({
+        "type": "string",
+        "length": 10,
+    }));
+    let payload = result.unwrap();
+    // println!("{:?}", payload);
+    // println!("{}", serde_json::to_string_pretty(&payload).unwrap());
 
-//     let connect = result.unwrap();
-//     use tokio_serial::*;
-//     assert!(matches!(
-//         connect.settings,
-//         ModbusProto::Rtu {
-//             ref tty,
-//             baud_rate: 12800,
-//             data_bits: DataBits::Seven,
-//             stop_bits: StopBits::Two,
-//             flow_control: FlowControl::Software,
-//             parity: Parity::Even,
-//             ..
-//         } if tty == "/dev/ttyUSB0"
-//     ),);
-// }
+    assert!(matches!(
+        payload.value_type,
+        RegisterValueType::String(RegisterString { length: 10, .. })
+    ));
+}
 
-// #[test]
-// fn parse_empty_register_parser_defaults() {
-//     let empty = serde_json::from_value::<RegisterParse>(json!({}));
-//     assert!(matches!(
-//         empty.unwrap(),
-//         RegisterParse {
-//             swap_bytes: Swap(false),
-//             swap_words: Swap(false),
-//             value_type: RegisterValueType::Numeric {
-//                 of: RegisterNumeric::U16,
-//                 adjust: RegisterNumericAdjustment {
-//                     scale: 0,
-//                     offset: 0,
-//                 }
-//             }
-//         }
-//     ));
-// }
+#[test]
+fn parse_register_parser_scale_etc() {
+    use serde_json::json;
+    let result = serde_json::from_value::<RegisterParse>(json!({
+        "type": "s32",
+        "scale": -1,
+        "offset": 20,
+    }));
+    assert!(matches!(
+        result.unwrap().value_type,
+        RegisterValueType::Numeric {
+            of: RegisterNumeric::I32,
+            adjust: RegisterNumericAdjustment {
+                scale: -1,
+                offset: 20
+            }
+        }
+    ));
+}
 
-// #[test]
-// fn parse_register_parser_type() {
-//     let result = serde_json::from_value::<RegisterParse>(json!({
-//         "type": "s32"
-//     }));
-//     assert!(matches!(
-//         result.unwrap().value_type,
-//         RegisterValueType::Numeric {
-//             of: RegisterNumeric::I32,
-//             ..
-//         }
-//     ));
-// }
+impl RegisterValueType {
+    pub fn parse_words(&self, words: &[u16]) -> serde_json::Value {
+        use self::RegisterNumeric as N;
+        use rust_decimal::{prelude::FromPrimitive, Decimal, MathematicalOps};
+        use serde_json::json;
+        use RegisterValueType as T;
 
-// #[test]
-// fn parse_register_parser_array() {
-//     let result = serde_json::from_value::<RegisterParse>(json!({
-//         "type": "array",
-//         "of": "s32",
-//         "count": 10,
-//     }));
-//     let payload = result.unwrap();
-//     // println!("{:?}", payload);
-//     // println!("{}", serde_json::to_string_pretty(&payload).unwrap());
+        let bytes: Vec<u8> = words.iter().flat_map(|v| v.to_ne_bytes()).collect();
 
-//     assert!(matches!(
-//         payload.value_type,
-//         RegisterValueType::Array(RegisterArray {
-//             of: RegisterNumeric::I32,
-//             count: 10,
-//             ..
-//         })
-//     ));
-// }
+        match *self {
+            T::Numeric { ref of, ref adjust } => {
+                let scale: Decimal = Decimal::TEN.powi(adjust.scale.into()).normalize();
+                let offset = Decimal::from(adjust.offset);
+                match of {
+                    N::U8 => json!(scale * Decimal::from(bytes[1]) + offset), // or is it 0?
+                    N::U16 => json!(scale * Decimal::from(words[0]) + offset),
+                    N::U32 => {
+                        json!(bytes
+                            .try_into()
+                            .map(|bytes| scale * Decimal::from(u32::from_le_bytes(bytes)) + offset)
+                            .ok())
+                    }
+                    N::U64 => {
+                        json!(bytes
+                            .try_into()
+                            .map(|bytes| scale * Decimal::from(u64::from_le_bytes(bytes)) + offset)
+                            .ok())
+                    }
+                    N::I8 => {
+                        json!(vec![bytes[1]]
+                            .try_into()
+                            .map(|bytes| scale * Decimal::from(i8::from_le_bytes(bytes)) + offset)
+                            .ok())
+                    }
+                    N::I16 => {
+                        json!(bytes
+                            .try_into()
+                            .map(|bytes| scale * Decimal::from(i16::from_le_bytes(bytes)) + offset)
+                            .ok())
+                    }
+                    N::I32 => {
+                        json!(bytes
+                            .try_into()
+                            .map(|bytes| scale * Decimal::from(i32::from_le_bytes(bytes)) + offset)
+                            .ok())
+                    }
+                    N::I64 => {
+                        json!(bytes
+                            .try_into()
+                            .map(|bytes| scale * Decimal::from(i64::from_le_bytes(bytes)) + offset)
+                            .ok())
+                    }
+                    N::F32 => {
+                        json!(bytes
+                            .try_into()
+                            .map(|bytes| scale
+                                * Decimal::from_f32(f32::from_le_bytes(bytes)).unwrap()
+                                + offset)
+                            .ok())
+                    }
+                    N::F64 => {
+                        json!(bytes
+                            .try_into()
+                            .map(|bytes| scale
+                                * Decimal::from_f64(f64::from_le_bytes(bytes)).unwrap()
+                                + offset)
+                            .ok())
+                    }
+                }
+            }
+            T::String(RegisterString { .. }) => {
+                json!(String::from_utf16_lossy(words))
+            }
+            T::Array(RegisterArray { .. }) => todo!(),
+        }
+    }
+}
 
-// #[test]
-// fn parse_register_parser_array_implicit_u16() {
-//     let result = serde_json::from_value::<RegisterParse>(json!({
-//         "type": "array",
-//         "count": 10,
-//     }));
-//     let payload = result.unwrap();
-//     // println!("{:?}", payload);
-//     // println!("{}", serde_json::to_string_pretty(&payload).unwrap());
+impl Register {
+    pub fn parse_words(&self, words: &[u16]) -> serde_json::Value {
+        self.parse.value_type.parse_words(words)
+    }
 
-//     assert!(matches!(
-//         payload.value_type,
-//         RegisterValueType::Array(RegisterArray {
-//             of: RegisterNumeric::U16,
-//             count: 10,
-//             ..
-//         })
-//     ));
-// }
+    pub fn apply_swaps(&self, words: &[u16]) -> Vec<u16> {
+        let words: Vec<u16> = if self.parse.swap_bytes.0 {
+            words.iter().map(|v| v.swap_bytes()).collect()
+        } else {
+            words.into()
+        };
 
-// #[test]
-// fn parse_register_parser_string() {
-//     let result = serde_json::from_value::<RegisterParse>(json!({
-//         "type": "string",
-//         "length": 10,
-//     }));
-//     let payload = result.unwrap();
-//     // println!("{:?}", payload);
-//     // println!("{}", serde_json::to_string_pretty(&payload).unwrap());
+        if self.parse.swap_words.0 {
+            words
+                .chunks_exact(2)
+                .flat_map(|chunk| vec![chunk[1], chunk[0]])
+                .collect()
+        } else {
+            words
+        }
+    }
+}
+#[cfg(test)]
+use pretty_assertions::assert_eq;
+#[test]
+fn test_parse_1() {
+    use serde_json::json;
 
-//     assert!(matches!(
-//         payload.value_type,
-//         RegisterValueType::String(RegisterString { length: 10, .. })
-//     ));
-// }
+    let reg = AddressedRegister {
+        address: 42,
+        register: Register {
+            name: None,
+            interval: Default::default(),
+            parse: RegisterParse {
+                swap_bytes: Swap(false),
+                swap_words: Swap(false),
+                value_type: RegisterValueType::Numeric {
+                    of: RegisterNumeric::I32,
+                    adjust: RegisterNumericAdjustment {
+                        scale: 0,
+                        offset: 0,
+                    },
+                },
+            },
+        },
+    };
 
-// #[test]
-// fn parse_register_parser_scale_etc() {
-//     let result = serde_json::from_value::<RegisterParse>(json!({
-//         "type": "s32",
-//         "scale": -1,
-//         "offset": 20,
-//     }));
-//     assert!(matches!(
-//         result.unwrap().value_type,
-//         RegisterValueType::Numeric {
-//             of: RegisterNumeric::I32,
-//             adjust: RegisterNumericAdjustment {
-//                 scale: -1,
-//                 offset: 20
-//             }
-//         }
-//     ));
-// }
+    assert_eq!(reg.register.parse_words(&[843, 0]), json!(843));
+}
