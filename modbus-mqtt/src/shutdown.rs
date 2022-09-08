@@ -1,7 +1,7 @@
 //! **Note**: this is a barely modified copy of the code which appears in mini-redis
 
 type Notify = tokio::sync::broadcast::Receiver<()>;
-
+type Guard = tokio::sync::mpsc::Sender<()>;
 /// Listens for the server shutdown signal.
 ///
 /// Shutdown is signalled using a `broadcast::Receiver`. Only a single value is
@@ -19,6 +19,20 @@ pub(crate) struct Shutdown {
 
     /// The receive half of the channel used to listen for shutdown.
     notify: Notify,
+
+    /// Optional guard as a sender so that when the `Shutdown` struct is dropped, the other side of the channel is
+    /// closed.
+    guard: Option<Guard>,
+}
+
+impl Clone for Shutdown {
+    fn clone(&self) -> Self {
+        Self {
+            shutdown: self.shutdown,
+            notify: self.notify.resubscribe(),
+            guard: self.guard.clone(),
+        }
+    }
 }
 
 impl Shutdown {
@@ -27,6 +41,15 @@ impl Shutdown {
         Shutdown {
             shutdown: false,
             notify,
+            guard: None,
+        }
+    }
+    /// Create a new `Shutdown` backed by the given `broadcast::Receiver` with a given guard.
+    pub(crate) fn with_guard(notify: Notify, guard: Guard) -> Shutdown {
+        Shutdown {
+            shutdown: false,
+            notify,
+            guard: Some(guard),
         }
     }
 
@@ -54,5 +77,16 @@ impl Shutdown {
 impl From<Notify> for Shutdown {
     fn from(notify: Notify) -> Self {
         Self::new(notify)
+    }
+}
+
+impl From<(Notify, Guard)> for Shutdown {
+    fn from((notify, guard): (Notify, Guard)) -> Self {
+        Self::with_guard(notify, guard)
+    }
+}
+impl From<(Guard, Notify)> for Shutdown {
+    fn from((guard, notify): (Guard, Notify)) -> Self {
+        Self::with_guard(notify, guard)
     }
 }

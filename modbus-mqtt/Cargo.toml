@@ -19,7 +19,7 @@ itertools = "0.10.3"
 rumqttc = { version = "0.15.0", default-features = true, features = ["url"] } # https://github.com/bytebeamio/rumqtt/issues/446
 rust_decimal = { version = "1.26.1", features = ["serde-arbitrary-precision", "serde-float", "serde_json", "maths"] }
 serde = { version = "1.0.139", features = ["serde_derive"] }
-serde_json = "1.0.82"
+serde_json = { version = "1.0.82", features = ["raw_value"] }
 serialport = { version = "4.2.0", optional = true, features = ["serde"] }
 thiserror = "1.0.33"
 tokio = { version = "1.20.0", features = ["rt", "rt-multi-thread", "time", "signal"] }

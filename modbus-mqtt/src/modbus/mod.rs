@@ -1,10 +1,10 @@
 use rust_decimal::{prelude::FromPrimitive, Decimal};
 use serde::Serialize;
 
-use self::config::{Register, RegisterValueType};
+use self::register::{Register, RegisterValueType};
 
-pub mod config;
 pub mod connection;
+pub mod connector;
 pub mod register;
 
 pub use connection::Connection;
@@ -18,20 +18,20 @@ pub enum ConnectState {
     Errored,
 }
 
-#[derive(Serialize)]
-pub struct ConnectStatus {
-    #[serde(flatten)]
-    pub connect: config::Connect,
-    pub status: ConnectState,
-}
+// #[derive(Serialize)]
+// pub struct ConnectStatus {
+//     #[serde(flatten)]
+//     pub connect: config::Connect,
+//     pub status: ConnectState,
+// }
 
 pub type UnitId = tokio_modbus::prelude::SlaveId;
 pub type Unit = tokio_modbus::prelude::Slave;
 
 impl RegisterValueType {
     pub fn parse_words(&self, words: &[u16]) -> serde_json::Value {
-        use self::config::RegisterValueType as T;
-        use self::config::{RegisterArray, RegisterNumeric as N, RegisterString};
+        use self::register::RegisterValueType as T;
+        use self::register::{RegisterArray, RegisterNumeric as N, RegisterString};
         use serde_json::json;
 
         let bytes: Vec<u8> = words.iter().flat_map(|v| v.to_ne_bytes()).collect();
@@ -132,7 +132,7 @@ impl Register {
 use pretty_assertions::assert_eq;
 #[test]
 fn test_parse_1() {
-    use self::config::{RegisterParse, Swap};
+    use self::register::{RegisterParse, Swap};
     use serde_json::json;
 
     let reg = Register {
@@ -143,8 +143,8 @@ fn test_parse_1() {
             swap_bytes: Swap(false),
             swap_words: Swap(false),
             value_type: RegisterValueType::Numeric {
-                of: config::RegisterNumeric::I32,
-                adjust: config::RegisterNumericAdjustment {
+                of: register::RegisterNumeric::I32,
+                adjust: register::RegisterNumericAdjustment {
                     scale: 0,
                     offset: 0,
                 },

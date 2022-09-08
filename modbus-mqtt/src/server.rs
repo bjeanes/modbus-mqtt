@@ -1,90 +1,69 @@
-use crate::mqtt;
+use crate::{modbus, mqtt};
+
 use rumqttc::MqttOptions;
-use std::future::Future;
-use tokio::sync::broadcast;
-use tracing::{debug, error, info};
+use std::{future::Future, time::Duration};
+use tokio::{
+    sync::{broadcast, mpsc},
+    time::timeout,
+};
+use tracing::{error, info};
 
-pub struct Server {
-    notify_shutdown: broadcast::Sender<()>,
-    mqtt_connection: mqtt::Connection,
-}
-
-pub async fn run<P: Into<String>>(
+pub async fn run<P: Into<String> + Send>(
     prefix: P,
-    mqtt_options: MqttOptions,
+    mut mqtt_options: MqttOptions,
     shutdown: impl Future,
 ) -> crate::Result<()> {
+    let prefix = prefix.into();
+
     let (notify_shutdown, _) = broadcast::channel(1);
-    let mqtt_connection = mqtt::new(mqtt_options, notify_shutdown.subscribe().into()).await;
+    let (shutdown_complete_tx, mut shutdown_complete_rx) = mpsc::channel(1);
 
-    let mut server = Server {
-        notify_shutdown,
-        mqtt_connection,
-    };
+    // TODO: make sure mqtt connection is last thing to shutdown, so other components can send final messages.
+    mqtt_options.set_last_will(rumqttc::LastWill {
+        topic: prefix.clone(),
+        message: "offline".into(),
+        qos: rumqttc::QoS::AtMostOnce,
+        retain: false,
+    });
+    let mut mqtt_connection = mqtt::new(
+        mqtt_options,
+        (notify_shutdown.subscribe(), shutdown_complete_tx.clone()).into(),
+    )
+    .await;
+    mqtt_connection
+        .handle()
+        .publish(prefix.clone(), "online")
+        .await?;
+    let mqtt = mqtt_connection.prefixed_handle(prefix)?;
 
-    let mut ret = Ok(());
+    let mut connector = modbus::connector::new(
+        mqtt.clone(),
+        (notify_shutdown.subscribe(), shutdown_complete_tx.clone()).into(),
+    );
 
-    tokio::select! {
-        res = server.run() => {
-            if let Err(err) = res {
-                error!(cause = %err, "server error");
-                ret = Err(err)
-            } else {
-                info!("server finished running")
-            }
+    tokio::spawn(async move {
+        if let Err(err) = mqtt_connection.run().await {
+            error!(cause = %err, "MQTT connection error");
         }
+    });
 
-        _ = shutdown => {
-            info!("shutting down");
+    tokio::spawn(async move {
+        if let Err(err) = connector.run().await {
+            error!(cause = %err, "Modbus connector error");
         }
-    }
+    });
 
-    let Server {
-        notify_shutdown, ..
-    } = server;
-
+    shutdown.await;
     drop(notify_shutdown);
+    drop(shutdown_complete_tx);
 
-    ret
-}
+    timeout(Duration::from_secs(5), shutdown_complete_rx.recv())
+        .await
+        .map_err(|_| {
+            crate::Error::Other("Shutdown didn't complete within 5 seconds; aborting".into())
+        })?;
 
-impl Server {
-    async fn run(&mut self) -> crate::Result<()> {
-        info!("Starting up");
+    info!("Shutdown.");
 
-        let tx = self.mqtt_connection.prefixed_handle("hello")?;
-
-        {
-            let tx = tx.clone();
-            tokio::spawn(async move {
-                let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
-                loop {
-                    interval.tick().await;
-                    tx.send(mqtt::Message::Publish(rumqttc::Publish::new(
-                        "foo/bar/baz",
-                        rumqttc::QoS::AtLeastOnce,
-                        "hello",
-                    )))
-                    .await
-                    .unwrap();
-                }
-            });
-        }
-
-        tokio::spawn(async move {
-            let (tx_bytes, mut rx) = tokio::sync::mpsc::channel(32);
-            tx.send(mqtt::Message::Subscribe(
-                rumqttc::Subscribe::new("foo/+/baz", rumqttc::QoS::AtLeastOnce),
-                tx_bytes,
-            ))
-            .await
-            .unwrap();
-
-            while let Some(bytes) = rx.recv().await {
-                debug!(?bytes, "received");
-            }
-        });
-
-        self.mqtt_connection.run().await
-    }
+    Ok(())
 }

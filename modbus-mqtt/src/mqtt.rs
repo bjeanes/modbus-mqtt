@@ -7,15 +7,21 @@ use rumqttc::{
 };
 use tokio::{
     select,
-    sync::mpsc::{channel, Receiver, Sender},
+    sync::mpsc::{self, channel, Receiver, Sender},
 };
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use crate::shutdown::Shutdown;
 
 #[derive(Debug)]
+pub struct Payload {
+    pub bytes: Bytes,
+    pub topic: String,
+}
+
+#[derive(Debug, Clone)]
 pub enum Message {
-    Subscribe(Subscribe, Sender<Bytes>),
+    Subscribe(Subscribe, Sender<Payload>),
     Publish(Publish),
     Shutdown,
 }
@@ -37,7 +43,7 @@ pub(crate) async fn new(options: MqttOptions, shutdown: Shutdown) -> Connection 
 // Maintain internal subscriptions as well as MQTT subscriptions. Relay all received messages on MQTT subscribed topics
 // to internal components who have a matching topic. Unsubscribe topics when no one is listening anymore.
 pub(crate) struct Connection {
-    subscriptions: HashMap<String, Vec<Sender<Bytes>>>,
+    subscriptions: HashMap<String, Vec<Sender<Payload>>>,
     tx: Sender<Message>,
     rx: Receiver<Message>,
     client: AsyncClient,
@@ -50,10 +56,7 @@ impl Connection {
         loop {
             select! {
                 event = self.event_loop.poll() => {
-                    match event {
-                        Ok(event) => self.handle_event(event).await?,
-                        _ => todo!()
-                    }
+                    self.handle_event(event?).await?
                 }
                 request = self.rx.recv() => {
                     match request {
@@ -62,41 +65,33 @@ impl Connection {
                         Some(req) => self.handle_request(req).await?,
                     }
                 }
-                _ = self.shutdown.recv() => return Ok(())
+                _ = self.shutdown.recv() => {
+                    info!("MQTT connection shutting down");
+                    break;
+                }
             }
         }
+
+        Ok(())
     }
 
     /// Create a handle for interacting with the MQTT server such that a pre-provided prefix is transparently added to
     /// all relevant commands which use a topic.
-    pub fn prefixed_handle<S: Into<String> + Send>(
-        &self,
-        prefix: S,
-    ) -> crate::Result<Sender<Message>> {
+    pub fn prefixed_handle<S: Into<String> + Send>(&self, prefix: S) -> crate::Result<Handle> {
         let prefix = prefix.into();
 
         if !valid_topic(&prefix) {
             return Err("Prefix is not a valid topic".into());
         }
 
-        let inner_tx = self.handle();
-        let (wrapper_tx, mut wrapper_rx) = channel::<Message>(8);
-
-        let prefix: String = prefix.into();
-
-        tokio::spawn(async move {
-            while let Some(msg) = wrapper_rx.recv().await {
-                if inner_tx.send(msg.prefixed(prefix.clone())).await.is_err() {
-                    break;
-                }
-            }
-        });
-
-        Ok(wrapper_tx)
+        Ok(self.handle().scoped(prefix))
     }
 
-    pub fn handle(&self) -> Sender<Message> {
-        self.tx.clone()
+    pub fn handle(&self) -> Handle {
+        Handle {
+            prefix: None,
+            tx: self.tx.clone(),
+        }
     }
 
     async fn handle_event(&mut self, event: Event) -> crate::Result<()> {
@@ -116,7 +111,7 @@ impl Connection {
     }
 
     #[tracing::instrument(level = "debug", skip(self), fields(subscriptions = ?self.subscriptions.keys()))]
-    async fn handle_data(&mut self, topic: String, payload: Bytes) -> crate::Result<()> {
+    async fn handle_data(&mut self, topic: String, bytes: Bytes) -> crate::Result<()> {
         let mut targets = vec![];
 
         // Remove subscriptions whose channels are closed, adding matching channels to the `targets` vec.
@@ -138,7 +133,14 @@ impl Connection {
         });
 
         for target in targets {
-            if target.send(payload.clone()).await.is_err() {
+            if target
+                .send(Payload {
+                    topic: topic.clone(),
+                    bytes: bytes.clone(),
+                })
+                .await
+                .is_err()
+            {
                 // These will be removed above next time a matching payload is removed
             }
         }
@@ -179,47 +181,122 @@ impl Connection {
     }
 }
 
-trait Prefixable {
-    fn prefixed<S: Into<String>>(self, prefix: S) -> Self;
+#[derive(Clone)]
+pub struct Handle {
+    prefix: Option<String>,
+    tx: Sender<Message>,
 }
 
-impl Prefixable for Message {
-    fn prefixed<S: Into<String>>(self, prefix: S) -> Self {
+impl Handle {
+    pub async fn subscribe<S: Into<String>>(&self, topic: S) -> crate::Result<Receiver<Payload>> {
+        let (tx_bytes, rx) = mpsc::channel(8);
+        let mut msg =
+            Message::Subscribe(Subscribe::new(topic, rumqttc::QoS::AtLeastOnce), tx_bytes);
+        if let Some(prefix) = &self.prefix {
+            msg = msg.scoped(prefix.to_owned());
+        }
+        self.tx
+            .send(msg)
+            .await
+            .map_err(|_| crate::Error::SendError)?;
+        Ok(rx)
+    }
+    pub async fn publish<S: Into<String>, B: Into<Bytes>>(
+        &self,
+        topic: S,
+        payload: B,
+    ) -> crate::Result<()> {
+        let mut msg = Message::Publish(Publish::new(
+            topic,
+            rumqttc::QoS::AtLeastOnce,
+            payload.into(),
+        ));
+        if let Some(prefix) = &self.prefix {
+            msg = msg.scoped(prefix.to_owned());
+        }
+        self.tx
+            .send(msg)
+            .await
+            .map_err(|_| crate::Error::SendError)?;
+        Ok(())
+    }
+}
+
+pub(crate) trait Scopable {
+    fn scoped<S: Into<String>>(&self, prefix: S) -> Self;
+}
+
+// FIXME: this doesn't actually _prefix_ it _appends_ to the existing prefix, so there's probably a better name for this
+// trait, like: Scopable
+impl Scopable for Handle {
+    fn scoped<S: Into<String>>(&self, prefix: S) -> Self {
         match self {
-            Message::Subscribe(sub, bytes) => Message::Subscribe(sub.prefixed(prefix), bytes),
-            Message::Publish(publish) => Message::Publish(publish.prefixed(prefix)),
-            other => other,
+            Self { prefix: None, tx } => Self {
+                prefix: Some(prefix.into()),
+                tx: tx.clone(),
+            },
+            Self {
+                prefix: Some(existing),
+                tx,
+            } => Self {
+                prefix: Some(format!("{}/{}", existing, prefix.into())),
+                tx: tx.clone(),
+            },
         }
     }
 }
 
-impl Prefixable for Subscribe {
-    fn prefixed<S: Into<String>>(mut self, prefix: S) -> Self {
+impl Scopable for Message {
+    fn scoped<S: Into<String>>(&self, prefix: S) -> Self {
+        match self {
+            Message::Subscribe(sub, bytes) => Message::Subscribe(sub.scoped(prefix), bytes.clone()),
+            Message::Publish(publish) => Message::Publish(publish.scoped(prefix)),
+            other => (*other).clone(),
+        }
+    }
+}
+
+impl Scopable for Subscribe {
+    fn scoped<S: Into<String>>(&self, prefix: S) -> Self {
         let prefix: String = prefix.into();
         Self {
             pkid: self.pkid,
             filters: self
                 .filters
-                .iter_mut()
-                .map(|f| f.clone().prefixed(prefix.clone()))
+                .iter()
+                .map(|f| f.clone().scoped(prefix.clone()))
                 .collect(),
         }
     }
 }
 
-impl Prefixable for Publish {
-    fn prefixed<S: Into<String>>(self, prefix: S) -> Self {
+impl Scopable for Publish {
+    fn scoped<S: Into<String>>(&self, prefix: S) -> Self {
         let mut prefixed = self.clone();
         prefixed.topic = format!("{}/{}", prefix.into(), &self.topic);
         prefixed
     }
 }
 
-impl Prefixable for SubscribeFilter {
-    fn prefixed<S: Into<String>>(self, prefix: S) -> Self {
+impl Scopable for SubscribeFilter {
+    fn scoped<S: Into<String>>(&self, prefix: S) -> Self {
         SubscribeFilter {
             path: format!("{}/{}", prefix.into(), &self.path),
             qos: self.qos,
         }
+    }
+}
+
+impl From<Payload> for Bytes {
+    fn from(payload: Payload) -> Self {
+        payload.bytes
+    }
+}
+
+impl std::ops::Deref for Payload {
+    type Target = Bytes;
+
+    fn deref(&self) -> &Self::Target {
+        &self.bytes
     }
 }

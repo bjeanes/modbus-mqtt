@@ -1,5 +1,6 @@
 use clap::Parser;
 use modbus_mqtt::{server, Result};
+use rumqttc::MqttOptions;
 use url::Url;
 
 #[derive(Parser, Debug)]
@@ -14,7 +15,8 @@ struct Cli {
         env = "MQTT_URL",
         // validator = "is_mqtt_url",
         default_value = "mqtt://localhost:1883/modbus-mqtt",
-        value_hint = clap::ValueHint::Url
+        value_hint = clap::ValueHint::Url,
+        help = "Pass the topic prefix as the URL path"
     )]
     url: Url,
 }
@@ -22,24 +24,33 @@ struct Cli {
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
-    let mut args = Cli::parse();
 
-    let prefix = args
-        .url
+    let Cli { mut url } = Cli::parse();
+
+    let mut prefix = url
         .path()
         .trim_start_matches('/')
-        .split('/')
-        .next()
-        .unwrap_or(env!("CARGO_PKG_NAME"))
+        .trim_end_matches('/')
         .to_owned();
 
-    // FIXME: if they pass "?client_id=foo" param, skip this
-    args.url
-        .query_pairs_mut()
-        .append_pair("client_id", env!("CARGO_PKG_NAME"))
-        .finish();
+    let options: MqttOptions = match url.clone().try_into() {
+        Ok(options) => options,
+        Err(rumqttc::OptionError::ClientId) => {
+            let url = url
+                .query_pairs_mut()
+                .append_pair("client_id", env!("CARGO_PKG_NAME"))
+                .finish()
+                .clone();
+            url.try_into()?
+        }
+        Err(other) => return Err(other.into()),
+    };
 
-    server::run(prefix, args.url.try_into()?, tokio::signal::ctrl_c()).await?;
+    if prefix.is_empty() {
+        prefix = options.client_id();
+    }
+
+    server::run(prefix, options, tokio::signal::ctrl_c()).await?;
 
     Ok(())
 }
