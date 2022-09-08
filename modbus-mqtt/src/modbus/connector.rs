@@ -90,32 +90,7 @@ async fn connect(config: Config<'_>, mqtt: mqtt::Handle, shutdown: Shutdown) -> 
 
     mqtt.publish("state", "connecting").await?;
 
-    // connection isn't able to be Send, so we have to create connection inside its run task and find out if instantiation failed by connection on a channel.
-    {
-        let mqtt = mqtt.clone();
-        let (tx, rx) = tokio::sync::oneshot::channel::<crate::Result<()>>();
-        tokio::spawn(async move {
-            match connection::new(settings, mqtt.clone(), shutdown).await {
-                Ok(connection) => {
-                    if let Err(e) = mqtt.publish("state", "connected").await {
-                        tx.send(Err(e))
-                    } else {
-                        tx.send(Ok(()))
-                    }
-                    .expect("unexpected closed receiver");
-
-                    if let Err(error) = connection.run().await {
-                        error!(?error, "Modbus connection quit unexpectedly");
-                    }
-                }
-                Err(e) => {
-                    tx.send(Err(e)).expect("unexpected closed receiver");
-                }
-            }
-        });
-
-        rx.await.map_err(|_| crate::Error::RecvError)??;
-    }
+    let connection_handler = connection::run(settings, mqtt.clone(), shutdown).await?;
 
     for reg in input {
         let mqtt = mqtt.scoped("input");

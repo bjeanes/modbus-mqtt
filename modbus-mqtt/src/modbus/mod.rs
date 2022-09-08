@@ -7,9 +7,6 @@ pub mod connection;
 pub mod connector;
 pub mod register;
 
-pub use connection::Connection;
-// pub use register::Register;
-
 #[derive(Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ConnectState {
