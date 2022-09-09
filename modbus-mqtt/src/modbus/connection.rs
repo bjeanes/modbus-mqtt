@@ -49,8 +49,14 @@ pub(crate) async fn run(
 
                     let _ = connection_is_ready.send(());
 
-                    if let Err(error) = conn.run().await {
+                    let result = conn.run().await;
+
+                    if let Err(error) = result {
                         error!(?error, "Modbus connection failed");
+                        mqtt.publish("state", "errorered").await.unwrap();
+                        mqtt.publish("last_error", format!("{error:?}"))
+                            .await
+                            .unwrap();
                         tokio::time::sleep(std::time::Duration::from_secs(current_wait as u64))
                             .await;
 
@@ -73,7 +79,10 @@ pub(crate) async fn run(
         }
     });
 
-    is_connection_ready.changed().await;
+    is_connection_ready
+        .changed()
+        .await
+        .map_err(|_| Error::RecvError)?;
     Ok(handle)
 }
 

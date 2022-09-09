@@ -31,21 +31,17 @@ impl Monitor {
             loop {
                 interval.tick().await;
                 if let Ok(words) = self.read().await {
-                    debug!(address=%self.register.address, "type"=?self.register.register_type, ?words);
-
-                    #[cfg(feature = "raw")]
-                    self.mqtt
-                        .publish("raw", serde_json::to_vec(&words).unwrap())
-                        .await
-                        .unwrap();
-
                     let value = self.register.parse_words(&words);
+                    let value = serde_json::to_string(&value).unwrap();
 
-                    if let Err(error) = self
-                        .mqtt
-                        .publish("state", serde_json::to_vec(&value).unwrap())
-                        .await
-                    {
+                    debug!(
+                        address=%self.register.address,
+                        "type"=?self.register.register_type,
+                        %value,
+                        raw=%format!("{:04x?}", &words),
+                    );
+
+                    if let Err(error) = self.mqtt.publish("state", value).await {
                         warn!(?error);
                         break;
                     }
