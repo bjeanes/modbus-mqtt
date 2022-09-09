@@ -82,10 +82,6 @@ async fn parse_and_connect(
     Ok(())
 }
 async fn connect(config: Config, mqtt: mqtt::Handle, shutdown: Shutdown) -> crate::Result<()> {
-    if shutdown.is_shutdown() {
-        return Ok(());
-    }
-
     #[allow(deprecated)]
     let Config {
         connection: settings,

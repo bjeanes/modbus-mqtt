@@ -7,7 +7,7 @@
             "address": 13000,
             "type": "u16",
             "name": "running_state",
-            "period": "3s"
+            "period": "1s"
         },
         {
             "address": 13022,

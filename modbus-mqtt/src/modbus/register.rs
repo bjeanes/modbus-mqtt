@@ -41,10 +41,14 @@ impl Monitor {
 
                     let value = self.register.parse_words(&words);
 
-                    self.mqtt
+                    if let Err(error) = self
+                        .mqtt
                         .publish("state", serde_json::to_vec(&value).unwrap())
                         .await
-                        .unwrap();
+                    {
+                        warn!(?error);
+                        break;
+                    }
                 }
             }
         });
