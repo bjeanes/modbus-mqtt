@@ -16,7 +16,7 @@ clap = { version = "3.2.12", features = ["derive", "env"] }
 humantime-serde = "1.1.1"
 itertools = "0.10.3"
 
-rumqttc = { version = "0.15.0", default-features = true, features = ["url"] } # https://github.com/bytebeamio/rumqtt/issues/446
+rumqttc = { version = "0.16.0", default-features = false, features = ["url"] }
 rust_decimal = { version = "1.26.1", features = ["serde-arbitrary-precision", "serde-float", "serde_json", "maths"] }
 serde = { version = "1.0.139", features = ["serde_derive"] }
 serde_json = { version = "1.0.82", features = ["raw_value"] }
