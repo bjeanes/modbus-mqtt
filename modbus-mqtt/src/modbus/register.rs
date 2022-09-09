@@ -49,9 +49,7 @@ impl Monitor {
                         .await
                         .unwrap();
 
-                    let value = self
-                        .register
-                        .parse_words(&self.register.apply_swaps(&words));
+                    let value = self.register.parse_words(&words);
 
                     self.mqtt
                         .publish("state", serde_json::to_vec(&value).unwrap())
@@ -504,10 +502,10 @@ impl Register {
     }
 
     pub fn parse_words(&self, words: &[u16]) -> serde_json::Value {
-        self.parse.value_type.parse_words(words)
+        self.parse.value_type.parse_words(&self.apply_swaps(words))
     }
 
-    pub fn apply_swaps(&self, words: &[u16]) -> Vec<u16> {
+    fn apply_swaps(&self, words: &[u16]) -> Vec<u16> {
         let words: Vec<u16> = if self.parse.swap_bytes.0 {
             words.iter().map(|v| v.swap_bytes()).collect()
         } else {
@@ -532,14 +530,14 @@ use crate::mqtt::{self, Payload};
 fn test_parse_1() {
     use serde_json::json;
 
-    Register {
+    let reg = Register {
         name: None,
         interval: Default::default(),
         parse: RegisterParse {
             swap_bytes: Swap(false),
-            swap_words: Swap(false),
+            swap_words: Swap(true),
             value_type: RegisterValueType::Numeric {
-                of: RegisterNumeric::I32,
+                of: RegisterNumeric::U32,
                 adjust: RegisterNumericAdjustment {
                     scale: 0,
                     offset: 0,
