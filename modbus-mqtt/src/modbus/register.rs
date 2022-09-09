@@ -1,5 +1,130 @@
+use super::Word;
 use serde::{Deserialize, Serialize};
-use std::{ops::Add, time::Duration};
+use std::time::Duration;
+use tokio::{
+    select,
+    sync::mpsc,
+    time::{interval, MissedTickBehavior},
+};
+use tracing::{debug, warn};
+
+pub struct Monitor {
+    mqtt: mqtt::Handle,
+    modbus: super::Handle,
+    address: u16,
+    register: Register,
+    register_type: RegisterType,
+}
+
+impl Monitor {
+    pub fn new(
+        register: Register,
+        register_type: RegisterType,
+        address: u16,
+        mqtt: mqtt::Handle,
+        modbus: super::Handle,
+    ) -> Monitor {
+        Monitor {
+            mqtt,
+            register_type,
+            register,
+            address,
+            modbus,
+        }
+    }
+
+    pub async fn run(self) {
+        tokio::spawn(async move {
+            let mut interval = interval(self.register.interval);
+            interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+
+            loop {
+                interval.tick().await;
+                if let Ok(words) = self.read().await {
+                    debug!(address=%self.address, "type"=?self.register_type, ?words);
+
+                    #[cfg(debug_assertions)]
+                    self.mqtt
+                        .publish("raw", serde_json::to_vec(&words).unwrap())
+                        .await
+                        .unwrap();
+
+                    let value = self
+                        .register
+                        .parse_words(&self.register.apply_swaps(&words));
+
+                    self.mqtt
+                        .publish("state", serde_json::to_vec(&value).unwrap())
+                        .await
+                        .unwrap();
+                }
+            }
+        });
+    }
+
+    async fn read(&self) -> crate::Result<Vec<Word>> {
+        match self.register_type {
+            RegisterType::Input => {
+                self.modbus
+                    .read_input_register(self.address, self.register.size())
+                    .await
+            }
+            RegisterType::Holding => {
+                self.modbus
+                    .read_holding_register(self.address, self.register.size())
+                    .await
+            }
+        }
+    }
+}
+
+pub(crate) async fn subscribe(
+    mqtt: &mqtt::Handle,
+) -> crate::Result<mpsc::Receiver<(RegisterType, AddressedRegister)>> {
+    let (tx, rx) = mpsc::channel(8);
+    let mut input_registers = mqtt.subscribe("input/+").await?;
+    let mut holding_registers = mqtt.subscribe("holding/+").await?;
+
+    tokio::spawn(async move {
+        fn to_register(payload: &Payload) -> crate::Result<AddressedRegister> {
+            let Payload { bytes, topic } = payload;
+            let address = topic
+                .rsplit("/")
+                .next()
+                .expect("subscribed topic guarantees we have a last segment")
+                .parse()?;
+            Ok(AddressedRegister {
+                address,
+                register: serde_json::from_slice(&bytes)?,
+            })
+        }
+
+        loop {
+            select! {
+                Some(ref payload) = input_registers.recv() => {
+                    match to_register(payload) {
+                        Ok(register) => if let Err(_) = tx.send((RegisterType::Input, register)).await { break; },
+                        Err(error) => warn!(?error, def=?payload.bytes, "ignoring invalid input register definition"),
+                    }
+                },
+                Some(ref payload) = holding_registers.recv() => {
+                    match to_register(payload) {
+                        Ok(register) => if let Err(_) = tx.send((RegisterType::Holding, register)).await { break; },
+                        Err(error) => warn!(?error, def=?payload.bytes, "ignoring invalid holding register definition"),
+                    }
+                }
+            }
+        }
+    });
+
+    Ok(rx)
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum RegisterType {
+    Input,
+    Holding,
+}
 
 #[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase", default)]
@@ -302,7 +427,7 @@ impl RegisterValueType {
         use serde_json::json;
         use RegisterValueType as T;
 
-        let bytes: Vec<u8> = words.iter().flat_map(|v| v.to_ne_bytes()).collect();
+        let bytes: Vec<u8> = words.iter().flat_map(|v| v.to_be_bytes()).collect();
 
         match *self {
             T::Numeric { ref of, ref adjust } => {
@@ -314,44 +439,44 @@ impl RegisterValueType {
                     N::U32 => {
                         json!(bytes
                             .try_into()
-                            .map(|bytes| scale * Decimal::from(u32::from_le_bytes(bytes)) + offset)
+                            .map(|bytes| scale * Decimal::from(u32::from_be_bytes(bytes)) + offset)
                             .ok())
                     }
                     N::U64 => {
                         json!(bytes
                             .try_into()
-                            .map(|bytes| scale * Decimal::from(u64::from_le_bytes(bytes)) + offset)
+                            .map(|bytes| scale * Decimal::from(u64::from_be_bytes(bytes)) + offset)
                             .ok())
                     }
                     N::I8 => {
                         json!(vec![bytes[1]]
                             .try_into()
-                            .map(|bytes| scale * Decimal::from(i8::from_le_bytes(bytes)) + offset)
+                            .map(|bytes| scale * Decimal::from(i8::from_be_bytes(bytes)) + offset)
                             .ok())
                     }
                     N::I16 => {
                         json!(bytes
                             .try_into()
-                            .map(|bytes| scale * Decimal::from(i16::from_le_bytes(bytes)) + offset)
+                            .map(|bytes| scale * Decimal::from(i16::from_be_bytes(bytes)) + offset)
                             .ok())
                     }
                     N::I32 => {
                         json!(bytes
                             .try_into()
-                            .map(|bytes| scale * Decimal::from(i32::from_le_bytes(bytes)) + offset)
+                            .map(|bytes| scale * Decimal::from(i32::from_be_bytes(bytes)) + offset)
                             .ok())
                     }
                     N::I64 => {
                         json!(bytes
                             .try_into()
-                            .map(|bytes| scale * Decimal::from(i64::from_le_bytes(bytes)) + offset)
+                            .map(|bytes| scale * Decimal::from(i64::from_be_bytes(bytes)) + offset)
                             .ok())
                     }
                     N::F32 => {
                         json!(bytes
                             .try_into()
                             .map(|bytes| scale
-                                * Decimal::from_f32(f32::from_le_bytes(bytes)).unwrap()
+                                * Decimal::from_f32(f32::from_be_bytes(bytes)).unwrap()
                                 + offset)
                             .ok())
                     }
@@ -359,7 +484,7 @@ impl RegisterValueType {
                         json!(bytes
                             .try_into()
                             .map(|bytes| scale
-                                * Decimal::from_f64(f64::from_le_bytes(bytes)).unwrap()
+                                * Decimal::from_f64(f64::from_be_bytes(bytes)).unwrap()
                                 + offset)
                             .ok())
                     }
@@ -374,6 +499,10 @@ impl RegisterValueType {
 }
 
 impl Register {
+    pub fn size(&self) -> u8 {
+        self.parse.value_type.size()
+    }
+
     pub fn parse_words(&self, words: &[u16]) -> serde_json::Value {
         self.parse.value_type.parse_words(words)
     }
@@ -397,28 +526,27 @@ impl Register {
 }
 #[cfg(test)]
 use pretty_assertions::assert_eq;
+
+use crate::mqtt::{self, Payload};
 #[test]
 fn test_parse_1() {
     use serde_json::json;
 
-    let reg = AddressedRegister {
-        address: 42,
-        register: Register {
-            name: None,
-            interval: Default::default(),
-            parse: RegisterParse {
-                swap_bytes: Swap(false),
-                swap_words: Swap(false),
-                value_type: RegisterValueType::Numeric {
-                    of: RegisterNumeric::I32,
-                    adjust: RegisterNumericAdjustment {
-                        scale: 0,
-                        offset: 0,
-                    },
+    Register {
+        name: None,
+        interval: Default::default(),
+        parse: RegisterParse {
+            swap_bytes: Swap(false),
+            swap_words: Swap(false),
+            value_type: RegisterValueType::Numeric {
+                of: RegisterNumeric::I32,
+                adjust: RegisterNumericAdjustment {
+                    scale: 0,
+                    offset: 0,
                 },
             },
         },
     };
 
-    assert_eq!(reg.register.parse_words(&[843, 0]), json!(843));
+    assert_eq!(reg.parse_words(&[843, 0]), json!(843));
 }

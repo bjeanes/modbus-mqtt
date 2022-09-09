@@ -92,24 +92,24 @@ async fn connect(config: Config<'_>, mqtt: mqtt::Handle, shutdown: Shutdown) -> 
         holding,
     } = config;
 
-    let connection_handler = connection::run(settings, mqtt.clone(), shutdown).await?;
+    let _ = connection::run(settings, mqtt.clone(), shutdown).await?;
 
     // TODO: consider waiting 1 second before sending the registers to MQTT, to ensure that the connection is listening.
 
-    for reg in input {
-        let mqtt = mqtt.scoped("input");
-        if let Ok(r) = serde_json::from_slice::<register::AddressedRegister>(reg.get().as_bytes()) {
-            debug!(?r);
-            let bytes: bytes::Bytes = reg.get().as_bytes().to_owned().into();
-            mqtt.publish(r.address.to_string(), bytes).await?;
-        }
-    }
-    for reg in holding {
-        let mqtt = mqtt.scoped("holding");
-        if let Ok(r) = serde_json::from_slice::<register::AddressedRegister>(reg.get().as_bytes()) {
-            debug!(?r);
-            let bytes: bytes::Bytes = reg.get().as_bytes().to_owned().into();
-            mqtt.publish(r.address.to_string(), bytes).await?;
+    for (reg_type, registers) in [("holding", holding), ("input", input)] {
+        let mqtt = mqtt.scoped(reg_type);
+        for reg in registers {
+            if let Ok(r) =
+                serde_json::from_slice::<register::AddressedRegister>(reg.get().as_bytes())
+            {
+                let json = serde_json::to_vec(&r.register).unwrap(); // unwrap() should be fine because we JUST deserialized it successfully
+                mqtt.publish(r.address.to_string(), json).await?;
+                // if let Some(name) = r.register.name {
+                //     r.register.name = None;
+                //     let json = serde_json::to_vec(&r).unwrap(); // unwrap() should be fine because we JUST deserialized it successfully
+                //     mqtt.publish(name, json).await?;
+                // }
+            }
         }
     }
 

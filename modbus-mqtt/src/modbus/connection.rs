@@ -1,4 +1,6 @@
-use crate::modbus::{self};
+use super::Word;
+use crate::modbus::{self, register};
+use crate::mqtt::Scopable;
 use crate::Error;
 use rust_decimal::prelude::Zero;
 use serde::Deserialize;
@@ -8,6 +10,8 @@ use tokio_modbus::client::{rtu, tcp, Context as ModbusClient};
 use tracing::{debug, error, warn};
 
 use crate::{mqtt, shutdown::Shutdown};
+
+use super::register::RegisterType;
 
 pub(crate) async fn run(
     config: Config,
@@ -83,20 +87,21 @@ impl Handle {
         address: u16,
         quantity: u8,
     ) -> crate::Result<Vec<Word>> {
-        self.read_register(ReadType::Input, address, quantity).await
+        self.read_register(RegisterType::Input, address, quantity)
+            .await
     }
     pub async fn read_holding_register(
         &self,
         address: u16,
         quantity: u8,
     ) -> crate::Result<Vec<Word>> {
-        self.read_register(ReadType::Holding, address, quantity)
+        self.read_register(RegisterType::Holding, address, quantity)
             .await
     }
 
     async fn read_register(
         &self,
-        reg_type: ReadType,
+        reg_type: RegisterType,
         address: u16,
         quantity: u8,
     ) -> crate::Result<Vec<Word>> {
@@ -109,35 +114,45 @@ impl Handle {
     }
 }
 
-type Word = u16;
 type Response = oneshot::Sender<crate::Result<Vec<Word>>>;
-
-#[derive(Clone, Copy, Debug)]
-enum ReadType {
-    Input,
-    Holding,
-}
 
 #[derive(Debug)]
 enum Command {
-    Read(ReadType, u16, u8, Response),
+    Read(RegisterType, u16, u8, Response),
     Write(u16, Vec<Word>, Response),
 }
 
 impl Connection {
     pub async fn run(mut self) -> crate::Result<()> {
-        let mut input_registers = self.mqtt.subscribe("input/+").await?;
-        let mut holding_registers = self.mqtt.subscribe("holding/+").await?;
-
-        // TODO: if we get a new register definition for an existing register, how do we avoid redundant (and possibly
-        // conflicting) tasks? Should MQTT component only allow one subscriber per topic filter, replacing the old one
-        // when it gets a new subscribe request?
+        let mut registers_rx = register::subscribe(&self.mqtt).await?;
 
         loop {
             select! {
-                Some(reg) = input_registers.recv() => {},
-                Some(reg) = holding_registers.recv() => {},
                 Some(cmd) = self.rx.recv() => { self.process_command(cmd).await; },
+
+                Some((reg_type, reg)) = registers_rx.recv() => {
+                    debug!(?reg_type, ?reg);
+                    let scope = format!(
+                        "{}/{}",
+                        match &reg_type {
+                            RegisterType::Input => "input",
+                            RegisterType::Holding => "holding",
+                        },
+                        reg.address
+                    );
+                    let mqtt = self.mqtt.scoped(scope);
+                    let modbus = self.handle();
+                    register::Monitor::new(
+                        reg.register,
+                        reg_type,
+                        reg.address,
+                        mqtt,
+                        modbus,
+                    )
+                    .run()
+                    .await;
+                },
+
                 _ = self.shutdown.recv() => {
                     return Ok(());
                 }
@@ -150,6 +165,11 @@ impl Connection {
             tx: self.tx.clone(),
         }
     }
+
+    // TODO: if we get a new register definition for an existing register, how do we avoid redundant (and possibly
+    // conflicting) tasks? Should MQTT component only allow one subscriber per topic filter, replacing the old one
+    // when it gets a new subscribe request?
+    // IDEA: Allow providing a subscription ID which _replaces_ any existing subscription with the same ID
 
     /// Apply address offset to address.
     ///
@@ -175,12 +195,11 @@ impl Connection {
         }
     }
 
-    #[tracing::instrument(skip(self))]
     async fn process_command(&mut self, cmd: Command) {
         use tokio_modbus::prelude::Reader;
 
         let (tx, response) = match cmd {
-            Command::Read(ReadType::Input, address, count, tx) => {
+            Command::Read(RegisterType::Input, address, count, tx) => {
                 let address = self.adjust_address(address);
                 (
                     tx,
@@ -189,7 +208,7 @@ impl Connection {
                         .await,
                 )
             }
-            Command::Read(ReadType::Holding, address, count, tx) => {
+            Command::Read(RegisterType::Holding, address, count, tx) => {
                 let address = self.adjust_address(address);
                 (
                     tx,
@@ -224,8 +243,17 @@ impl Connection {
         //     Os { code: 36, kind: Uncategorized, message: "Operation now in progress" }'
         //     Os { code: 35, kind: WouldBlock, message: "Resource temporarily unavailable" }
         //
-        if let Err(error) = &response {
-            warn!(?error, "modbus command error");
+        match &response {
+            Err(error) => match error.kind() {
+                std::io::ErrorKind::UnexpectedEof => {
+                    // THIS happening feels like a bug either in how I am using tokio_modbus or in tokio_modbus. It seems
+                    // like the underlying buffers get all messed up and restarting doesn't always fix it unless I wait a
+                    // few seconds. I might need to get help from someone to figure it out.
+                    error!(?error, "Connection error, may not be recoverable");
+                }
+                _ => error!(?error),
+            },
+            _ => {}
         }
 
         // This probably just means that the register task died or is no longer monitoring the response.

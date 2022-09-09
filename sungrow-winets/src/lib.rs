@@ -344,6 +344,7 @@ struct Device {
     dev_type: u8,
 
     // unit/slave ID
+    #[allow(dead_code)]
     #[serde(deserialize_with = "serde_aux::prelude::deserialize_number_from_string")]
     phys_addr: u8,
     // UNUSED:
@@ -397,7 +398,7 @@ fn test_deserialize_device() {
 enum WebSocketMessage {
     Connect { token: String },
 
-    DeviceList { list: Vec<Device> },
+    // DeviceList { list: Vec<Device> },
 
     // Not yet used:
     // State,  // system state
@@ -414,7 +415,7 @@ enum WebSocketMessage {
 
 #[derive(Debug, Deserialize)]
 struct ResultList<T> {
-    count: u16,
+    // count: u16,
     #[serde(rename = "list")]
     items: Vec<T>,
 }

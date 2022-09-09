@@ -4,12 +4,9 @@ use crate::{
 };
 
 use rumqttc::MqttOptions;
-use std::{future::Future, time::Duration};
-use tokio::{
-    sync::{broadcast, mpsc},
-    time::timeout,
-};
-use tracing::{error, info};
+use std::future::Future;
+use tokio::sync::{broadcast, mpsc};
+use tracing::error;
 
 pub async fn run<P: Into<String> + Send>(
     prefix: P,

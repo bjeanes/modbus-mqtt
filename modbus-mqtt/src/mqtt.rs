@@ -1,9 +1,9 @@
-use std::{collections::HashMap, future::Future};
+use std::collections::HashMap;
 
 use bytes::Bytes;
 use rumqttc::{
-    mqttbytes::matches as matches_topic, mqttbytes::valid_topic, AsyncClient, Event, EventLoop,
-    MqttOptions, Publish, Subscribe, SubscribeFilter,
+    mqttbytes::matches as matches_topic, AsyncClient, Event, EventLoop, MqttOptions, Publish,
+    Subscribe, SubscribeFilter,
 };
 use tokio::{
     select,
@@ -68,18 +68,6 @@ impl Connection {
         }
 
         Ok(())
-    }
-
-    /// Create a handle for interacting with the MQTT server such that a pre-provided prefix is transparently added to
-    /// all relevant commands which use a topic.
-    pub fn prefixed_handle<S: Into<String> + Send>(&self, prefix: S) -> crate::Result<Handle> {
-        let prefix = prefix.into();
-
-        if !valid_topic(&prefix) {
-            return Err("Prefix is not a valid topic".into());
-        }
-
-        Ok(self.handle().scoped(prefix))
     }
 
     pub fn handle(&self) -> Handle {
@@ -185,6 +173,10 @@ pub struct Handle {
     tx: Sender<Message>,
 }
 
+// IDEA: make subscribe+publish _generic_ over the payload type, as long as it implements a Payload trait we define,
+// which allows them to perform the serialization/deserialization to Bytes. For most domain types, the trait would be
+// implemented to use serde_json but for Bytes and Vec<u8> it would just return itself.
+// The return values may need to be crate::Result<Receiver<Option<T>> or crate::Result<Receiver<crate::Result<T>>>.
 impl Handle {
     pub async fn subscribe<S: Into<String>>(&self, topic: S) -> crate::Result<Receiver<Payload>> {
         let (tx_bytes, rx) = mpsc::channel(8);

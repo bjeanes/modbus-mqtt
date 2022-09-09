@@ -1,6 +1,7 @@
 use clap::Parser;
 use modbus_mqtt::{server, Result};
 use rumqttc::MqttOptions;
+use tokio::select;
 use url::Url;
 
 #[derive(Parser, Debug)]
@@ -50,7 +51,30 @@ async fn main() -> Result<()> {
         prefix = options.client_id();
     }
 
-    server::run(prefix, options, tokio::signal::ctrl_c()).await?;
+    let shutdown = async move {
+        let ctrl_c = tokio::signal::ctrl_c();
+
+        #[cfg(unix)]
+        {
+            use tokio::signal::unix::{signal, SignalKind};
+
+            let mut term = signal(SignalKind::terminate()).unwrap();
+            let mut int = signal(SignalKind::interrupt()).unwrap();
+            let mut hup = signal(SignalKind::hangup()).unwrap();
+
+            select! {
+                _ = ctrl_c => {},
+                _ = term.recv() => {},
+                _ = int.recv() => {},
+                _ = hup.recv() => {},
+            }
+        }
+
+        #[cfg(not(unix))]
+        ctrl_c.await;
+    };
+
+    server::run(prefix, options, shutdown).await?;
 
     Ok(())
 }

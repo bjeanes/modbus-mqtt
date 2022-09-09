@@ -8,43 +8,84 @@
             "address": 5017,
             "type": "u32",
             "name": "dc_power",
-            "swap_words": false,
-            "period": "3s"
+            "swap_words": true,
+            "period": "1s"
+        },
+        {
+            "address": 13034,
+            "type": "u32",
+            "name": "active_power",
+            "swap_words": true,
+            "period": "1s"
         },
         {
             "address": 5008,
             "type": "s16",
             "name": "internal_temperature",
-            "period": "1m"
+            "period": "1m",
+            "scale": -1
         },
         {
             "address": 13008,
             "type": "s32",
             "name": "load_power",
-            "swap_words": false,
-            "period": "3s"
+            "swap_words": true,
+            "period": "1s"
         },
         {
             "address": 13010,
             "type": "s32",
             "name": "export_power",
-            "swap_words": false,
-            "period": "3s"
+            "swap_words": true,
+            "period": "1s"
         },
         {
             "address": 13022,
             "name": "battery_power",
-            "period": "3s"
+            "period": "1s"
         },
         {
             "address": 13023,
             "name": "battery_level",
-            "period": "1m"
+            "period": "1m",
+            "scale": -1
         },
         {
             "address": 13024,
             "name": "battery_health",
-            "period": "10m"
+            "period": "10m",
+            "scale": -1
+        },
+        {
+            "address": 5036,
+            "name": "grid_frequency",
+            "period": "1m"
+        },
+        {
+            "address": 5019,
+            "name": "phase_a_voltage",
+            "period": "1m"
+        },
+        {
+            "address": 13031,
+            "name": "phase_a_current",
+            "period": "1m"
+        },
+        {
+            "address": 5011,
+            "name": "mppt1_voltage"
+        },
+        {
+            "address": 5012,
+            "name": "mppt1_current"
+        },
+        {
+            "address": 5012,
+            "name": "mppt2_voltage"
+        },
+        {
+            "address": 5013,
+            "name": "mppt2_current"
         }
     ],
     "holding": [
@@ -57,6 +98,15 @@
             "address": 13059,
             "name": "min_soc",
             "period": "90s"
+        },
+        {
+            "address": 13100,
+            "name": "battery_reserve"
+        },
+        {
+            "address": 33148,
+            "name": "forced_battery_power",
+            "scale": 1
         }
     ]
 }
