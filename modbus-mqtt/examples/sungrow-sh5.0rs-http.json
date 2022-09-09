@@ -1,0 +1,19 @@
+{
+    "host": "10.10.10.219",
+    "unit": 1,
+    "proto": "winet-s",
+    "input": [
+        {
+            "address": 13000,
+            "type": "u16",
+            "name": "running_state",
+            "period": "3s"
+        },
+        {
+            "address": 13022,
+            "type": "s16",
+            "name": "battery_power",
+            "period": "3s"
+        }
+    ]
+}

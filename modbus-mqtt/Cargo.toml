@@ -1,6 +1,6 @@
 [package]
 name = "modbus-mqtt"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Bo Jeanes <me@bjeanes.com>"]
 description = "A bridge between Modbus devices and MQTT"
@@ -15,18 +15,29 @@ bytes = "1.1.0"
 clap = { version = "3.2.12", features = ["derive", "env"] }
 humantime-serde = "1.1.1"
 itertools = "0.10.3"
-rumqttc = "0.15.0"
+
+rumqttc = { version = "0.15.0", default-features = true, features = ["url"] } # https://github.com/bytebeamio/rumqtt/issues/446
 rust_decimal = { version = "1.26.1", features = ["serde-arbitrary-precision", "serde-float", "serde_json", "maths"] }
 serde = { version = "1.0.139", features = ["serde_derive"] }
-serde_json = "1.0.82"
-serialport = { version = "4.2.0", features = ["serde"] }
-tokio = { version = "1.20.0", features = ["rt", "rt-multi-thread", "time"] }
-tokio-modbus = "0.5.3"
-tokio-serial = "5.4.3"
-tokio_modbus-winets = { version = "0.1.0", path = "../tokio_modbus-winets" }
+serde_json = { version = "1.0.82", features = ["raw_value"] }
+serialport = { version = "4.2.0", optional = true, features = ["serde"] }
+thiserror = "1.0.33"
+tokio = { version = "1.20.0", features = ["rt", "rt-multi-thread", "time", "signal"] }
+tokio-modbus = { version = "0.5.3", default-features = false }
+tokio-serial = { version = "5.4.3", optional = true }
+tokio_modbus-winets = { version = "0.1.0", path = "../tokio_modbus-winets", optional = true, default-features = false }
 tracing = "0.1.36"
 tracing-subscriber = "0.3.15"
-uuid = { version = "1.1.2", features = ["v4", "serde"] }
+url = { version = "2.2.2", features = ["serde"] }
 
 [dev-dependencies]
 pretty_assertions = "1.2.1"
+
+[features]
+default = ["tcp", "rtu", "winet-s"]
+tcp = ["tokio-modbus/tcp"]
+rtu = ["tokio-modbus/rtu", "dep:tokio-serial", "dep:serialport"]
+winet-s = ["dep:tokio_modbus-winets"]
+ws = ["rumqttc/websocket"]
+tls = ["rustls"]
+rustls = ["rumqttc/use-rustls"]
