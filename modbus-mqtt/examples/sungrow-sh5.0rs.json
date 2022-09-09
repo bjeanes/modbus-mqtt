@@ -92,12 +92,14 @@
         {
             "address": 13058,
             "name": "max_soc",
-            "period": "90s"
+            "period": "90s",
+            "scale": -1
         },
         {
             "address": 13059,
             "name": "min_soc",
-            "period": "90s"
+            "period": "90s",
+            "scale": -1
         },
         {
             "address": 13100,
