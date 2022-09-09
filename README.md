@@ -11,7 +11,7 @@ It is early days, but the plan is:
 * [ ] Support _setting_ holding registers
 * [ ] Support optional auto-configuration of Home Assistant entities, including using [MQTT Number](https://www.home-assistant.io/integrations/number.mqtt/) et al for holding registers, to allow setting the value.
 * [ ] TLS MQTT connections
-* [ ] ws:// and ws:// MQTT connections
+* [ ] WebSocket MQTT connections
 
 NOTE: For the time being, this does not support MQTTv5.
 
