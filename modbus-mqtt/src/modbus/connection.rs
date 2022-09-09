@@ -52,7 +52,7 @@ pub(crate) async fn run(
                 let send = mqtt.publish("state", "disconnected").await;
                 debug!(?config, ?send, "shutting down modbus connection");
             }
-            Err(error) => handle_tx.send(Err(error.into())).unwrap(),
+            Err(error) => handle_tx.send(Err(error)).unwrap(),
         }
     });
 
@@ -243,8 +243,8 @@ impl Connection {
         //     Os { code: 36, kind: Uncategorized, message: "Operation now in progress" }'
         //     Os { code: 35, kind: WouldBlock, message: "Resource temporarily unavailable" }
         //
-        match &response {
-            Err(error) => match error.kind() {
+        if let Err(error) = &response {
+            match error.kind() {
                 std::io::ErrorKind::UnexpectedEof => {
                     // THIS happening feels like a bug either in how I am using tokio_modbus or in tokio_modbus. It seems
                     // like the underlying buffers get all messed up and restarting doesn't always fix it unless I wait a
@@ -252,8 +252,7 @@ impl Connection {
                     error!(?error, "Connection error, may not be recoverable");
                 }
                 _ => error!(?error),
-            },
-            _ => {}
+            }
         }
 
         // This probably just means that the register task died or is no longer monitoring the response.

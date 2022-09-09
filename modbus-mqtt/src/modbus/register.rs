@@ -87,13 +87,13 @@ pub(crate) async fn subscribe(
         fn to_register(payload: &Payload) -> crate::Result<AddressedRegister> {
             let Payload { bytes, topic } = payload;
             let address = topic
-                .rsplit("/")
+                .rsplit('/')
                 .next()
                 .expect("subscribed topic guarantees we have a last segment")
                 .parse()?;
             Ok(AddressedRegister {
                 address,
-                register: serde_json::from_slice(&bytes)?,
+                register: serde_json::from_slice(bytes)?,
             })
         }
 
@@ -101,13 +101,13 @@ pub(crate) async fn subscribe(
             select! {
                 Some(ref payload) = input_registers.recv() => {
                     match to_register(payload) {
-                        Ok(register) => if let Err(_) = tx.send((RegisterType::Input, register)).await { break; },
+                        Ok(register) => if (tx.send((RegisterType::Input, register)).await).is_err() { break; },
                         Err(error) => warn!(?error, def=?payload.bytes, "ignoring invalid input register definition"),
                     }
                 },
                 Some(ref payload) = holding_registers.recv() => {
                     match to_register(payload) {
-                        Ok(register) => if let Err(_) = tx.send((RegisterType::Holding, register)).await { break; },
+                        Ok(register) => if (tx.send((RegisterType::Holding, register)).await).is_err() { break; },
                         Err(error) => warn!(?error, def=?payload.bytes, "ignoring invalid holding register definition"),
                     }
                 }
