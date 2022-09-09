@@ -1,8 +1,8 @@
 use super::Word;
+use crate::mqtt::{self, Payload, Scopable};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio::{
-    select,
     sync::mpsc,
     time::{interval, MissedTickBehavior},
 };
@@ -11,25 +11,15 @@ use tracing::{debug, warn};
 pub struct Monitor {
     mqtt: mqtt::Handle,
     modbus: super::Handle,
-    address: u16,
     register: Register,
-    register_type: RegisterType,
 }
 
 impl Monitor {
-    pub fn new(
-        register: Register,
-        register_type: RegisterType,
-        address: u16,
-        mqtt: mqtt::Handle,
-        modbus: super::Handle,
-    ) -> Monitor {
+    pub fn new(register: Register, mqtt: mqtt::Handle, modbus: super::Handle) -> Monitor {
         Monitor {
-            mqtt,
-            register_type,
-            register,
-            address,
+            mqtt: mqtt.scoped(register.path()),
             modbus,
+            register,
         }
     }
 
@@ -41,9 +31,9 @@ impl Monitor {
             loop {
                 interval.tick().await;
                 if let Ok(words) = self.read().await {
-                    debug!(address=%self.address, "type"=?self.register_type, ?words);
+                    debug!(address=%self.register.address, "type"=?self.register.register_type, ?words);
 
-                    #[cfg(debug_assertions)]
+                    #[cfg(feature = "raw")]
                     self.mqtt
                         .publish("raw", serde_json::to_vec(&words).unwrap())
                         .await
@@ -61,54 +51,41 @@ impl Monitor {
     }
 
     async fn read(&self) -> crate::Result<Vec<Word>> {
-        match self.register_type {
+        let Self { ref register, .. } = self;
+        match register.register_type {
             RegisterType::Input => {
                 self.modbus
-                    .read_input_register(self.address, self.register.size())
+                    .read_input_register(register.address, register.size())
                     .await
             }
             RegisterType::Holding => {
                 self.modbus
-                    .read_holding_register(self.address, self.register.size())
+                    .read_holding_register(register.address, register.size())
                     .await
             }
         }
     }
 }
 
-pub(crate) async fn subscribe(
-    mqtt: &mqtt::Handle,
-) -> crate::Result<mpsc::Receiver<(RegisterType, AddressedRegister)>> {
+pub(crate) async fn subscribe(mqtt: &mqtt::Handle) -> crate::Result<mpsc::Receiver<Register>> {
     let (tx, rx) = mpsc::channel(8);
-    let mut input_registers = mqtt.subscribe("input/+").await?;
-    let mut holding_registers = mqtt.subscribe("holding/+").await?;
+    let mut registers = mqtt.subscribe("registers/+/config").await?;
 
     tokio::spawn(async move {
-        fn to_register(payload: &Payload) -> crate::Result<AddressedRegister> {
-            let Payload { bytes, topic } = payload;
-            let address = topic
-                .rsplit('/')
-                .next()
-                .expect("subscribed topic guarantees we have a last segment")
-                .parse()?;
-            Ok(AddressedRegister {
-                address,
-                register: serde_json::from_slice(bytes)?,
-            })
+        fn to_register(payload: &Payload) -> crate::Result<Register> {
+            Ok(serde_json::from_slice(&payload.bytes)?)
         }
 
         loop {
-            select! {
-                Some(ref payload) = input_registers.recv() => {
-                    match to_register(payload) {
-                        Ok(register) => if (tx.send((RegisterType::Input, register)).await).is_err() { break; },
-                        Err(error) => warn!(?error, def=?payload.bytes, "ignoring invalid input register definition"),
+            if let Some(ref payload) = registers.recv().await {
+                match to_register(payload) {
+                    Ok(register) => {
+                        if (tx.send(register).await).is_err() {
+                            break;
+                        }
                     }
-                },
-                Some(ref payload) = holding_registers.recv() => {
-                    match to_register(payload) {
-                        Ok(register) => if (tx.send((RegisterType::Holding, register)).await).is_err() { break; },
-                        Err(error) => warn!(?error, def=?payload.bytes, "ignoring invalid holding register definition"),
+                    Err(error) => {
+                        warn!(?error, def=?payload.bytes, "ignoring invalid input register definition")
                     }
                 }
             }
@@ -118,8 +95,10 @@ pub(crate) async fn subscribe(
     Ok(rx)
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Deserialize, Serialize, PartialEq, Default, Clone, Copy, Debug)]
+#[serde(rename_all = "lowercase")]
 pub enum RegisterType {
+    #[default]
     Input,
     Holding,
 }
@@ -280,6 +259,11 @@ pub struct Register {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 
+    pub address: u16,
+
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    pub register_type: RegisterType,
+
     #[serde(flatten, default, skip_serializing_if = "IsDefault::is_default")]
     pub parse: RegisterParse,
 
@@ -290,13 +274,6 @@ pub struct Register {
         alias = "duration"
     )]
     pub interval: Duration,
-}
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AddressedRegister {
-    pub address: u16,
-
-    #[serde(flatten)]
-    pub register: Register,
 }
 
 fn default_register_interval() -> Duration {
@@ -501,6 +478,14 @@ impl Register {
         self.parse.value_type.size()
     }
 
+    pub fn path(&self) -> String {
+        if let Some(ref name) = self.name {
+            name.clone()
+        } else {
+            self.address.to_string()
+        }
+    }
+
     pub fn parse_words(&self, words: &[u16]) -> serde_json::Value {
         self.parse.value_type.parse_words(&self.apply_swaps(words))
     }
@@ -525,12 +510,13 @@ impl Register {
 #[cfg(test)]
 use pretty_assertions::assert_eq;
 
-use crate::mqtt::{self, Payload};
 #[test]
 fn test_parse_1() {
     use serde_json::json;
 
     let reg = Register {
+        register_type: RegisterType::Input,
+        address: 42,
         name: None,
         interval: Default::default(),
         parse: RegisterParse {

@@ -103,43 +103,36 @@ Post to `$MODBUS_MQTT_TOPIC/$CONNECTION_ID/$TYPE/$ADDRESS` where `$TYPE` is one 
 
 ```jsonc
 {
-  "name": null,        // OPTIONAL - gives the register a name which is used in the register MQTT topics (must be a valid topic component)
+  "address": 5123,          // REQUIRED
 
-  "interval": "1m",    // OPTIONAL - how often to update the registers value to MQTT
-                       //   e.g.: 3s (every 3 seconds)
-                       //         2m (every 2 minutes)
-                       //         1h (every 1 hour)
+  "register_type": "input", // OPTIONAL
 
-  "swap_bytes": false, // OPTIONAL
-  "swap_words": false, // OPTIONAL
+  "name": null,             // OPTIONAL - gives the register a name which is used in the register MQTT topics (must be a valid topic component)
 
-  "type": "s16",       // OPTIONAL
-                       //   valid: s8, s16, s32, s64 (signed)
-                       //          u8, u16, u32, u64 (unsigned)
-                       //          f32, f64          (floating point)
+  "interval": "1m",         // OPTIONAL - how often to update the registers value to MQTT
+                            //   e.g.: 3s (every 3 seconds)
+                            //         2m (every 2 minutes)
+                            //         1h (every 1 hour)
 
-  "scale": 0,          // OPTIONAL - number in register will be multiplied by 10^(scale)
-                       //   e.g.: to turn kW into W, you would provide scale=3
-                       //         to turn W into kW, you would provide scale=-3
+  "swap_bytes": false,      // OPTIONAL
+  "swap_words": false,      // OPTIONAL
 
-  "offset": 0,         // OPTIONAL - will be added to the final result (AFTER scaling)
+  "type": "s16",            // OPTIONAL
+                            //   valid: s8, s16, s32, s64 (signed)
+                            //          u8, u16, u32, u64 (unsigned)
+                            //          f32, f64          (floating point)
 
+  "scale": 0,               // OPTIONAL - number in register will be multiplied by 10^(scale)
+                            //   e.g.: to turn kW into W, you would provide scale=3
+                            //         to turn W into kW, you would provide scale=-3
 
-  // Additionally, "type" can be set to "array":
-  "type": "array",
-  "of": "u16"          // The default array element is u16, but you can change it with the `of` field
+  "offset": 0,              // OPTIONAL - will be added to the final result (AFTER scaling)
 }
 ```
 
-Further, the `type` field can additionally be set to `"array"`, in which case, a `count` field must be provided. The array elements default to `"s16"` but can be overriden in the `"of"` field.
-
-NOTE: this is likely to change such that there is always a `count` field (with default of 1) and if provided to be greater than 1, it will be interpreted to be an array of elements of the `type` specified.
-
-There is some code to accept `"string"` type (with a required `length` field) but this is experimental and untested.
-
 ##### Register shorthand
 
-When issuing the `connect` payload, you can optionally include `input` and/or `holding` fields as arrays containing the above register schema, as long as an `address` field is added. When present, these payloads will be replayed to the MQTT server as if the user had specified each register separately, as above.
+When issuing the `connect` payload, you can optionally include a top-level `registers` array, containing the above register schema. When present, these payloads will be replayed to the MQTT server as if the user had specified each register separately, as above.
 
 This is a recommended way to specify connections, but the registers are broken out separately so that they can be dynamically added to too.
 

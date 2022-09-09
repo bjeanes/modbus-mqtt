@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning].
 
 ## [Unreleased]
 
-- ...
+### Deprecated
+
+- Separate `holding` and `input` sections, in favour of specifying `register_type` field on the register definition to either `"input"` (default) or `"holding"`.
 
 ## [0.2.0] - 2022-09-09
 

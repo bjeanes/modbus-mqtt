@@ -2,7 +2,7 @@
     "host": "10.10.10.219",
     "unit": 1,
     "proto": "winet-s",
-    "input": [
+    "registers": [
         {
             "address": 13000,
             "type": "u16",

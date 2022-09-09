@@ -130,22 +130,12 @@ impl Connection {
             select! {
                 Some(cmd) = self.rx.recv() => { self.process_command(cmd).await; },
 
-                Some((reg_type, reg)) = registers_rx.recv() => {
-                    debug!(?reg_type, ?reg);
-                    let scope = format!(
-                        "{}/{}",
-                        match &reg_type {
-                            RegisterType::Input => "input",
-                            RegisterType::Holding => "holding",
-                        },
-                        reg.address
-                    );
-                    let mqtt = self.mqtt.scoped(scope);
+                Some(register) = registers_rx.recv() => {
+                    debug!(?register);
+                    let mqtt = self.mqtt.scoped("registers");
                     let modbus = self.handle();
                     register::Monitor::new(
-                        reg.register,
-                        reg_type,
-                        reg.address,
+                        register,
                         mqtt,
                         modbus,
                     )

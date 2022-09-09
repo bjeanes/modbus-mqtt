@@ -3,7 +3,7 @@
     "unit": 1,
     "proto": "tcp",
     "address_offset": -1,
-    "input": [
+    "registers": [
         {
             "address": 5017,
             "type": "u32",
@@ -87,25 +87,27 @@
             "address": 5013,
             "name": "mppt2_current"
         }
-    ],
-    "holding": [
         {
+            "register_type": "holding",
             "address": 13058,
             "name": "max_soc",
             "period": "90s",
             "scale": -1
         },
         {
+            "register_type": "holding",
             "address": 13059,
             "name": "min_soc",
             "period": "90s",
             "scale": -1
         },
         {
+            "register_type": "holding",
             "address": 13100,
             "name": "battery_reserve"
         },
         {
+            "register_type": "holding",
             "address": 33148,
             "name": "forced_battery_power",
             "scale": 1
