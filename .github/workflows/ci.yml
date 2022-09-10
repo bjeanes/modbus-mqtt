@@ -1,14 +1,22 @@
 # TODO: incorporate some learnings from https://www.infinyon.com/blog/2021/04/github-actions-best-practices/, esp `sccache` stuff
-# TODO: dispatch event technique from https://mateuscosta.me/rust-releases-with-github-actions looks handy for triggering another workflow, such as to share logic for building binaries
 
 name: CI
 on:
   push:
-    branches:
-      - '**'
+  pull_request:
+
+env:
+  NAME: modbus-mqtt
+  CARGO_TERM_COLOR: always
+  PKG_CONFIG_ALLOW_CROSS: 1
+
+defaults:
+  run:
+    # necessary for windows
+    shell: bash
 
 jobs:
-  test:
+  tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@master
@@ -25,7 +33,6 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get clean && sudo apt-get update
           sudo apt-get install -y pkg-config  libudev-dev
-
       - name: Cache cargo registry
         uses: actions/cache@v1
         with:
@@ -48,7 +55,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-build-target-${{ steps.rust-toolchain.outputs.rustc_hash }}-
             ${{ runner.os }}-cargo-build-target-
-
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
@@ -72,7 +78,6 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get clean && sudo apt-get update
           sudo apt-get install -y pkg-config  libudev-dev
-
       - name: Cache cargo registry
         uses: actions/cache@v1
         with:
@@ -97,7 +102,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-build-target-${{ steps.rust-toolchain.outputs.rustc_hash }}-
             ${{ runner.os }}-cargo-build-target-
-
       - name: Check rustfmt
         uses: actions-rs/cargo@v1
         with:
@@ -109,3 +113,126 @@ jobs:
         with:
           command: clippy
           args: -- -D clippy::all
+
+  build:
+    name: Build ${{matrix.TARGET}}
+    needs:
+      - tests
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - TARGET: x86_64-unknown-linux-gnu
+            OS: ubuntu-latest
+            DEPS: libudev-dev
+          - TARGET: x86_64-unknown-linux-musl
+            OS: ubuntu-latest
+          - TARGET: aarch64-unknown-linux-gnu
+            OS: ubuntu-latest
+            DEPS: libudev-dev:arm64
+          - TARGET: aarch64-unknown-linux-musl
+            OS: ubuntu-latest
+          - TARGET: armv7-unknown-linux-gnueabihf
+            OS: ubuntu-latest
+            DEPS: libudev-dev:armhf
+          - TARGET: armv7-unknown-linux-musleabihf
+            OS: ubuntu-latest
+          - TARGET: arm-unknown-linux-gnueabihf
+            OS: ubuntu-latest
+            DEPS: libudev-dev:armhf
+          - TARGET: arm-unknown-linux-musleabihf
+            OS: ubuntu-latest
+          - TARGET: x86_64-apple-darwin
+            OS: macos-latest
+          - TARGET: aarch64-apple-darwin
+            OS: macos-latest
+          - TARGET: x86_64-pc-windows-msvc
+            OS: windows-latest
+    runs-on: ${{ matrix.OS }}
+    env:
+      TARGET: ${{ matrix.TARGET }}
+      OS: ${{ matrix.OS }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: Cargo cache
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ./target
+          key: build-cargo-registry-${{matrix.TARGET}}
+      - name: Setup cross linux toolchain
+        if: contains(matrix.TARGET, '-linux-') && !startsWith(matrix.TARGET, 'x86_64-') && !contains(matrix.TARGET, '-musl')
+        run: |
+          case "${{ matrix.TARGET }}" in
+            i686-*) SYSTEM_ARCH=i386 ;;
+            arm*) SYSTEM_ARCH=armhf ;;
+            aarch64*) SYSTEM_ARCH=arm64 ;;
+          esac
+          GCC_TARGET=$(printf "${{ matrix.TARGET }}" | sed 's/-unknown-/-/' | sed 's/arm[^-]*/arm/g')
+          ENV_TARGET=$(printf "${{ matrix.TARGET }}" | tr '-' '_')
+          ENV_TARGET_UC=$(printf "${ENV_TARGET}" | tr '[[:lower:]]' '[[:upper:]]')
+          sudo rm -f /etc/apt/sources.list.d/*.list
+          case "${{ matrix.TARGET }}" in
+            arm* | aarch64*)
+          sudo tee /etc/apt/sources.list << EOF
+          deb [arch=i386,amd64] http://archive.ubuntu.com/ubuntu/ focal main universe
+          deb [arch=i386,amd64] http://archive.ubuntu.com/ubuntu/ focal-updates main universe
+          deb [arch=i386,amd64] http://security.ubuntu.com/ubuntu/ focal-security main universe
+          deb [arch=armhf,arm64] http://ports.ubuntu.com/ubuntu-ports/ focal main universe
+          deb [arch=armhf,arm64] http://ports.ubuntu.com/ubuntu-ports/ focal-updates main universe
+          deb [arch=armhf,arm64] http://ports.ubuntu.com/ubuntu-ports/ focal-security main universe
+          EOF
+              ;;
+          esac
+          sudo dpkg --add-architecture ${SYSTEM_ARCH}
+          dpkg --print-foreign-architectures
+          sudo apt-get update -qqy
+          sudo apt-get --fix-broken install
+          sudo apt-get install -qqy --fix-broken -o Debug::pkgProblemResolver=yes crossbuild-essential-${SYSTEM_ARCH} pkg-config-${GCC_TARGET}
+          echo "SYSTEM_ARCH=${SYSTEM_ARCH}" >> $GITHUB_ENV
+          echo "CARGO_TARGET_${ENV_TARGET_UC}_LINKER=${GCC_TARGET}-gcc" >> $GITHUB_ENV
+          echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
+          echo "PKG_CONFIG_${ENV_TARGET}=${GCC_TARGET}-pkg-config" >> $GITHUB_ENV
+          echo "PKG_CONFIG=${GCC_TARGET}-pkg-config" >> $GITHUB_ENV
+          echo "BINDGEN_EXTRA_CLANG_ARGS=\"-L/usr/lib/${GCC_TARGET} -L/lib/${GCC_TARGET}\"" >> $GITHUB_ENV
+      - name: Install dependencies
+        if: matrix.DEPS
+        run: |
+          sudo apt-get update
+          sudo apt-get install -qqy ${{ matrix.DEPS }}
+      - name: Configure linker
+        run: |
+          # some additional configuration for cross-compilation on linux
+          cat >>~/.cargo/config <<EOF
+          [target.aarch64-unknown-linux-gnu]
+          linker = "aarch64-linux-gnu-gcc"
+          # [target.aarch64-unknown-linux-musl]
+          # linker = "aarch64-linux-gnu-gcc"
+          [target.armv7-unknown-linux-gnueabihf]
+          linker = "arm-linux-gnueabihf-gcc"
+          # [target.armv7-unknown-linux-musleabihf]
+          # linker = "arm-linux-gnueabihf-gcc"
+          [target.arm-unknown-linux-gnueabihf]
+          linker = "arm-linux-gnueabihf-gcc"
+          # [target.arm-unknown-linux-musleabihf]
+          # linker = "arm-linux-gnueabihf-gcc"
+          EOF
+      - name: Install rust target
+        run: rustup target add $TARGET
+      - name: Run build
+        run: cargo build --release --verbose --target $TARGET
+
+      - name: Upload artifact
+        if: "!startsWith(matrix.config.os, 'windows')"
+        uses: actions/upload-artifact@v2
+        with:
+          name: modbus-mqtt-${{ matrix.TARGET }}.tar.gz
+          path: ./target/${{ matrix.TARGET }}/release/modbus-mqtt
+
+      - name: Upload artifact
+        if: startsWith(matrix.config.os, 'windows')
+        uses: actions/upload-artifact@v2
+        with:
+          name: modbus-mqtt-${{ matrix.TARGET }}.tar.gz
+          path: ./target/${{ matrix.TARGET }}/release/modbus-mqtt.exe
