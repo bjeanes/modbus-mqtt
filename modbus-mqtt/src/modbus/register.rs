@@ -95,7 +95,7 @@ pub(crate) async fn subscribe(mqtt: &mqtt::Handle) -> crate::Result<mpsc::Receiv
     Ok(rx)
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Default, Clone, Copy, Debug)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Default, Clone, Copy, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum RegisterType {
     #[default]

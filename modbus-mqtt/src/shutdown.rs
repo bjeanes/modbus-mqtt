@@ -62,7 +62,7 @@ impl Shutdown {
     pub(crate) async fn recv(&mut self) {
         // If the shutdown signal has already been received, then return
         // immediately.
-        if self.shutdown {
+        if self.is_shutdown() {
             return;
         }
 

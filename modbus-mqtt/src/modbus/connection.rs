@@ -60,12 +60,9 @@ pub(crate) async fn run(
                         tokio::time::sleep(std::time::Duration::from_secs(current_wait as u64))
                             .await;
 
-                        match conn {
-                            Connection { rx: r, tx: t, .. } => {
-                                rx = r;
-                                tx = t;
-                            }
-                        };
+                        let Connection { rx: r, tx: t, .. } = conn;
+                        rx = r;
+                        tx = t;
                         current_wait = (current_wait * 2).clamp(START_WAIT, MAX_WAIT);
                     } else {
                         // we are shutting down here, so don't care if this fails
