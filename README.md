@@ -4,7 +4,7 @@ This repository is a workspace for developing ModbusMQTT and the crates develope
 
 View the appropriate READMEs in each package directory for details about each.
 
-## `modbus-mqtt`
+## [`modbus-mqtt`](./modbus-mqtt)
 
 ![Crates.io](https://img.shields.io/crates/v/modbus-mqtt.svg)
 ![docs.rs](https://img.shields.io/docsrs/modbus-mqtt)
@@ -12,7 +12,7 @@ View the appropriate READMEs in each package directory for details about each.
 
 ModbusMQTT is a bridge between Modbus devices and MQTT. It aims to allow the operator to generically expose any compatible Modbus device as though its API were MQTT.
 
-## `sungrow-winets`
+## [`sungrow-winets`](./sungrow-winets)
 
 ![Crates.io](https://img.shields.io/crates/v/sungrow-winets.svg)
 ![docs.rs](https://img.shields.io/docsrs/sungrow-winets.svg)
@@ -20,7 +20,7 @@ ModbusMQTT is a bridge between Modbus devices and MQTT. It aims to allow the ope
 
 This is a barebones API client for reading and writing settings for Sungrow solar and hybrid inverters equipped with a WiNet-S communications module. Its only known use is `tokio_modbus-winets` (see below).
 
-## `tokio_modbus-winets`
+## [`tokio_modbus-winets`](./tokio_modbus-winets)
 
 ![Crates.io](https://img.shields.io/crates/v/tokio_modbus-winets.svg)
 ![docs.rs](https://img.shields.io/docsrs/tokio_modbus-winets)
