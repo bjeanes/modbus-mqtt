@@ -1,2 +1,4 @@
+.git
 Dockerfile
-**/README.md
+README.md
+/target/
