@@ -238,3 +238,76 @@ jobs:
         with:
           name: modbus-mqtt-${{ matrix.TARGET }}.zip
           path: modbus-mqtt.zip
+
+  prerelease:
+    name: Create a pre-release
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Download built assets from workflow artifacts
+        uses: actions/download-artifact@v2
+        with:
+          path: assets/
+
+      - name: Set release version variable
+        id: version
+        run: |
+          echo ::set-output name=version::`git describe --long --always --tags --exclude unstable`
+
+      # This generates a space-sparated list of `$asset_name:assets/$file_name/$file_name`
+      # strings by modifying the file_name to include the release version set
+      # above.
+      #
+      # The `actions/download-artifact` action puts each artifact in its own
+      # directory, even when it is a single file.
+      - name: Build list of artifacts
+        id: artifacts
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          files=$(ls -1 assets | perl -Wpe 's/^(modbus-mqtt)-(.*)$/$1-unstable-'$VERSION'-$2:assets\/$&\/*/g')
+          echo ::set-output name=files::`echo $files | xargs echo`
+
+      # Deleting the release and tag to work around some downsides of the
+      # meeDamian/github-release approach:
+      #
+      # 1. Tag is left pointing to the original release
+      # 2. Release is updated but its timestamp will be the time of original release
+      #
+      # Simply deleting the tag (e.g. `git push --delete origin unstable`) will
+      # work from a public-facing standpoint, but it leaves behind a lot of
+      # draft releases for the releases which were associated with the tag at
+      # the time it was deleted.
+      - name: Delete `unstable` tag and associated GH Release
+        uses: dev-drprasad/delete-tag-and-release@v0.1.2
+        with:
+          delete_release: true
+          tag_name: unstable
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Extract latest changelog entry
+      - name: Get Changelog Entry
+        id: changelog_reader
+        uses: mindsers/changelog-reader-action@v2.2.0
+        with:
+          path: ./modbus-mqtt/CHANGELOG.md
+          version: Unreleased
+
+      # Upserts the pre-release
+      - name: Create GH Release and `unstable` tag for current commit
+        uses: meeDamian/github-release@2.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          allow_override: true
+          prerelease: true
+          tag: unstable
+          commitish: ${{ github.sha }}
+          name: "Unstable (built from master)"
+          body: ${{ steps.changelog_reader.outputs.changes }}
+          files: ${{ steps.artifacts.outputs.files }}
+          gzip: false
