@@ -1,11 +1,8 @@
 # -*- mode: dockerfile -*-
 
-FROM rust:1.63 AS builder
+FROM rust:1.63-alpine AS builder
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt update && apt-get --no-install-recommends install -y \
-    libudev-dev
+RUN apk add --no-cache musl-dev
 
 # Build a cacheable layer with project dependencies
 RUN USER=rust cargo new /home/rust/sungrow-winets
@@ -25,13 +22,8 @@ ADD --chown=rust:rust . ./
 RUN cargo build --release
 
 # Now, we need to build our _real_ Docker container, copying in `bump-api`.
-FROM debian:bullseye-slim
-
-RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt update && apt-get --no-install-recommends install -y \
-    libudev1
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates
 
 COPY --from=builder \
     /home/rust/modbus-mqtt/target/release/modbus-mqtt \
