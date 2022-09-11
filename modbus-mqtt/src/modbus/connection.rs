@@ -53,7 +53,7 @@ pub(crate) async fn run(
 
                     if let Err(error) = result {
                         error!(?error, "Modbus connection failed");
-                        mqtt.publish("state", "errorered").await.unwrap();
+                        mqtt.publish("state", "error").await.unwrap();
                         mqtt.publish("last_error", format!("{error:?}"))
                             .await
                             .unwrap();

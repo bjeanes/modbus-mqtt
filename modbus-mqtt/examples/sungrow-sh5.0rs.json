@@ -59,34 +59,41 @@
         {
             "address": 5036,
             "name": "grid_frequency",
-            "period": "1m"
+            "period": "1m",
+            "scale": -2
         },
         {
             "address": 5019,
             "name": "phase_a_voltage",
-            "period": "1m"
+            "period": "1m",
+            "scale": -1
         },
         {
             "address": 13031,
             "name": "phase_a_current",
-            "period": "1m"
+            "period": "1m",
+            "scale": -1
         },
         {
             "address": 5011,
-            "name": "mppt1_voltage"
+            "name": "mppt1_voltage",
+            "scale": -1
         },
         {
             "address": 5012,
-            "name": "mppt1_current"
+            "name": "mppt1_current",
+            "scale": -1
         },
         {
             "address": 5012,
-            "name": "mppt2_voltage"
+            "name": "mppt2_voltage",
+            "scale": -1
         },
         {
             "address": 5013,
-            "name": "mppt2_current"
-        }
+            "name": "mppt2_current",
+            "scale": -1
+        },
         {
             "register_type": "holding",
             "address": 13058,
