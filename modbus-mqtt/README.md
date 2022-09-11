@@ -23,7 +23,7 @@ NOTE: For the time being, this does not support MQTTv5.
 
 For now, `cargo install` is the easiest way to install. Either run it in a checkout for the latest development version, or run `cargo install modbus-mqtt` to install the latest release version.
 
-If you don't want to set up the Rust toolchain, you can likely found built binaries as build artifacts in the GitHub Actions tab above.
+If you don't want to set up the Rust toolchain, you can likely found built binaries as build artifacts in the [GitHub Actions tab above](https://github.com/bjeanes/modbus-mqtt/actions?query=is%3Asuccess+branch%3Amain+workflow%3ACI).
 
 In the future, there will also be Docker images made available for convenience.
 
