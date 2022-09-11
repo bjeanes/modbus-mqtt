@@ -10,11 +10,6 @@ env:
   CARGO_TERM_COLOR: always
   PKG_CONFIG_ALLOW_CROSS: 1
 
-defaults:
-  run:
-    # necessary for windows
-    shell: bash
-
 jobs:
   tests:
     runs-on: ubuntu-latest
@@ -149,9 +144,6 @@ jobs:
           - TARGET: x86_64-pc-windows-msvc
             OS: windows-latest
     runs-on: ${{ matrix.OS }}
-    env:
-      TARGET: ${{ matrix.TARGET }}
-      OS: ${{ matrix.OS }}
     steps:
       - uses: actions/checkout@v2
       - name: Cargo cache
@@ -197,11 +189,12 @@ jobs:
           echo "PKG_CONFIG=${GCC_TARGET}-pkg-config" >> $GITHUB_ENV
           echo "BINDGEN_EXTRA_CLANG_ARGS=\"-L/usr/lib/${GCC_TARGET} -L/lib/${GCC_TARGET}\"" >> $GITHUB_ENV
       - name: Install dependencies
-        if: matrix.DEPS
+        if: contains(matrix.TARGET, '-linux-') && matrix.DEPS
         run: |
           sudo apt-get update
           sudo apt-get install -qqy ${{ matrix.DEPS }}
       - name: Configure linker
+        if: contains(matrix.TARGET, '-linux-')
         run: |
           # some additional configuration for cross-compilation on linux
           cat >>~/.cargo/config <<EOF
@@ -219,20 +212,29 @@ jobs:
           linker = "arm-linux-gnueabihf-gcc"
           EOF
       - name: Install rust target
-        run: rustup target add $TARGET
+        run: rustup target add ${{ matrix.TARGET }}
       - name: Run build
-        run: cargo build --release --verbose --target $TARGET
+        run: cargo build --release --verbose --target ${{ matrix.TARGET }}
 
-      - name: Upload artifact
-        if: "!startsWith(matrix.config.os, 'windows')"
+      - name: Package asset as gzip
+        if: "!startsWith(matrix.OS, 'windows')"
+        run: env GZIP=-9 tar zvcf modbus-mqtt.tar.gz -C ./target/${{ matrix.TARGET }}/release modbus-mqtt
+
+      - name: Package asset as zip
+        if: startsWith(matrix.OS, 'windows')
+        run: |
+          Compress-Archive -LiteralPath .\target\${{ matrix.TARGET }}\release\modbus-mqtt.exe -DestinationPath modbus-mqtt.zip
+
+      - name: Upload gzipped artifact
+        if: "!startsWith(matrix.OS, 'windows')"
         uses: actions/upload-artifact@v2
         with:
           name: modbus-mqtt-${{ matrix.TARGET }}.tar.gz
-          path: ./target/${{ matrix.TARGET }}/release/modbus-mqtt
+          path: modbus-mqtt.tar.gz
 
-      - name: Upload artifact
-        if: startsWith(matrix.config.os, 'windows')
+      - name: Upload zipped artifact
+        if: startsWith(matrix.OS, 'windows')
         uses: actions/upload-artifact@v2
         with:
-          name: modbus-mqtt-${{ matrix.TARGET }}.tar.gz
-          path: .\target\${{ matrix.TARGET }}\release\modbus-mqtt.exe
+          name: modbus-mqtt-${{ matrix.TARGET }}.zip
+          path: modbus-mqtt.zip
