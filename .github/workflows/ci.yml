@@ -162,14 +162,14 @@ jobs:
             ./target
           key: build-cargo-registry-${{matrix.TARGET}}
       - name: Setup cross linux toolchain
-        if: contains(matrix.TARGET, '-linux-') && !startsWith(matrix.TARGET, 'x86_64-') && !contains(matrix.TARGET, '-musl')
+        if: contains(matrix.TARGET, '-linux-') && !startsWith(matrix.TARGET, 'x86_64-')
         run: |
           case "${{ matrix.TARGET }}" in
             i686-*) SYSTEM_ARCH=i386 ;;
             arm*) SYSTEM_ARCH=armhf ;;
             aarch64*) SYSTEM_ARCH=arm64 ;;
           esac
-          GCC_TARGET=$(printf "${{ matrix.TARGET }}" | sed 's/-unknown-/-/' | sed 's/arm[^-]*/arm/g')
+          GCC_TARGET=$(printf "${{ matrix.TARGET }}" | sed 's/-unknown-/-/' | sed 's/arm[^-]*/arm/g' | sed 's/musl/gnu/g')
           ENV_TARGET=$(printf "${{ matrix.TARGET }}" | tr '-' '_')
           ENV_TARGET_UC=$(printf "${ENV_TARGET}" | tr '[[:lower:]]' '[[:upper:]]')
           sudo rm -f /etc/apt/sources.list.d/*.list
@@ -207,16 +207,16 @@ jobs:
           cat >>~/.cargo/config <<EOF
           [target.aarch64-unknown-linux-gnu]
           linker = "aarch64-linux-gnu-gcc"
-          # [target.aarch64-unknown-linux-musl]
-          # linker = "aarch64-linux-gnu-gcc"
+          [target.aarch64-unknown-linux-musl]
+          linker = "aarch64-linux-gnu-gcc"
           [target.armv7-unknown-linux-gnueabihf]
           linker = "arm-linux-gnueabihf-gcc"
-          # [target.armv7-unknown-linux-musleabihf]
-          # linker = "arm-linux-gnueabihf-gcc"
+          [target.armv7-unknown-linux-musleabihf]
+          linker = "arm-linux-gnueabihf-gcc"
           [target.arm-unknown-linux-gnueabihf]
           linker = "arm-linux-gnueabihf-gcc"
-          # [target.arm-unknown-linux-musleabihf]
-          # linker = "arm-linux-gnueabihf-gcc"
+          [target.arm-unknown-linux-musleabihf]
+          linker = "arm-linux-gnueabihf-gcc"
           EOF
       - name: Install rust target
         run: rustup target add $TARGET
@@ -235,4 +235,4 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: modbus-mqtt-${{ matrix.TARGET }}.tar.gz
-          path: ./target/${{ matrix.TARGET }}/release/modbus-mqtt.exe
+          path: .\target\${{ matrix.TARGET }}\release\modbus-mqtt.exe
