@@ -21,7 +21,11 @@ NOTE: For the time being, this does not support MQTTv5.
 
 ## Installing
 
-For now, use `cargo install` (Rust toolchain required). Soon, I will have release binaries attached to GitHub releases. In the future, there will also be Docker images made available for convenience.
+For now, `cargo install` is the easiest way to install. Either run it in a checkout for the latest development version, or run `cargo install modbus-mqtt` to install the latest release version.
+
+If you don't want to set up the Rust toolchain, you can likely found built binaries as build artifacts in the GitHub Actions tab above.
+
+In the future, there will also be Docker images made available for convenience.
 
 ## Running
 
