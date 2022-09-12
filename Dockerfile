@@ -27,7 +27,7 @@ ADD --chown=rust:rust . ./
 # Build our application.
 RUN --mount=type=cache,target=/home/rust/modbus-mqtt/target,sharing=locked \
     --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
-    cargo build --release --offline && mv target/release/modbus-mqtt ./bin
+    cargo build --release && mv target/release/modbus-mqtt ./bin
 
 # Now, we need to build our _real_ Docker container, copying in `bump-api`.
 FROM debian:bullseye-slim
