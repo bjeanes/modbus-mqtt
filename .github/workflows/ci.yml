@@ -329,11 +329,12 @@ jobs:
             type=ref,enable=true,priority=600,prefix=br-,suffix=,event=branch
             type=ref,enable=true,priority=600,prefix=,suffix=,event=tag
             type=ref,enable=true,priority=600,prefix=pr-,suffix=,event=pr
+
       - name: Docker meta
         id: meta-alpine
         uses: docker/metadata-action@v4
         with:
-          flavour:
+          flavor:
             suffix=-alpine
           images: |
             ${{ github.repository }}
