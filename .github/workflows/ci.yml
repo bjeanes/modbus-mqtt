@@ -362,47 +362,34 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Work around https://github.com/docker/buildx/issues/395
-      # - name: create small fs for docker cache
-      #   run: |
-      #     df -h
-      #     sudo swapon --show
-      #     sudo dd if=/dev/zero of=/swapfile1 bs=1M count=6K
-      #     sudo chmod 600 /swapfile1
-      #     sudo mkswap /swapfile1
-      #     sudo swapon /swapfile1
-      #     sudo swapon --show
-      #     sudo free -h
-      #     sudo systemctl stop docker
-      #     sudo mount -t tmpfs -o size=9G tmpfs /var/lib/docker
-      #     df -h
-      #     sudo systemctl start docker
-      - name: Run Docker on tmpfs
-        uses: JonasAlfredsson/docker-on-tmpfs@v1
-        with:
-          tmpfs_size: 5
-          swap_size: 4
-
-      # - name: Build and push (alpine)
-      #   uses: docker/build-push-action@v3
+      # Work around https://github.com/docker/buildx/issues/395 (this causes "no space left on device")
+      # - name: Run Docker on tmpfs
+      #   uses: JonasAlfredsson/docker-on-tmpfs@v1
       #   with:
-      #     context: .
-      #     platforms: |
-      #       linux/arm64
-      #       linux/amd64
-      #     push: true
-      #     file: Dockerfile.alpine
-      #     tags: ${{ steps.meta-alpine.outputs.tags }}
-      #     labels: ${{ steps.meta-alpine.outputs.labels }}
-      #     cache-from: type=gha
-      #     cache-to: type=gha,mode=max
+      #     tmpfs_size: 5
+      #     swap_size: 4
+
+      - name: Build and push (alpine)
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          platforms: |
+            linux/arm64
+            linux/amd64
+          push: true
+          file: Dockerfile.alpine
+          tags: ${{ steps.meta-alpine.outputs.tags }}
+          labels: ${{ steps.meta-alpine.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Build and push
         uses: docker/build-push-action@v3
         with:
           context: .
+          # Disabled due to https://github.com/docker/buildx/issues/395
+            # linux/arm/v7
           platforms: |
-            linux/arm/v7
             linux/arm64
             linux/amd64
           push: true
