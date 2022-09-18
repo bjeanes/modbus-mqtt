@@ -3,6 +3,8 @@
 name: CI
 on:
   push:
+    tags-ignore:
+      - unstable
   pull_request:
 
 env:
@@ -300,6 +302,7 @@ jobs:
           gzip: false
 
   docker:
+    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
     needs:
       - tests
     runs-on: ubuntu-latest
