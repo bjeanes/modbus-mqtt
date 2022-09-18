@@ -1,8 +1,9 @@
 # ModbusMQTT
 
-![Crates.io](https://img.shields.io/crates/v/modbus-mqtt.svg)
-![docs.rs](https://img.shields.io/docsrs/modbus-mqtt)
-![Crates.io](https://img.shields.io/crates/l/modbus-mqtt)
+[![Docker](https://img.shields.io/docker/v/bjeanes/modbus-mqtt?label=docker)](https://hub.docker.com/r/bjeanes/modbus-mqtt)
+[![Crates.io](https://img.shields.io/crates/v/modbus-mqtt.svg)](https://crates.io/crates/modbus-mqtt)
+[![docs.rs](https://img.shields.io/docsrs/modbus-mqtt)](https://docs.rs/modbus-mqtt/latest/modbus_mqtt/)
+![license](https://img.shields.io/crates/l/modbus-mqtt)
 
 A bridge between Modbus devices and MQTT.
 
@@ -21,11 +22,26 @@ NOTE: For the time being, this does not support MQTTv5.
 
 ## Installing
 
+### From Source
+
 For now, `cargo install` is the easiest way to install. Either run it in a checkout for the latest development version, or run `cargo install modbus-mqtt` to install the latest release version.
+
+### Pre-compiled
 
 If you don't want to set up the Rust toolchain, you can likely found built binaries as build artifacts in the [GitHub Actions tab above](https://github.com/bjeanes/modbus-mqtt/actions?query=is%3Asuccess+branch%3Amain+workflow%3ACI).
 
-In the future, there will also be Docker images made available for convenience.
+### Docker
+
+```sh-session
+$ docker run -it --rm bjeanes/modbus-mqtt:edge --help
+```
+
+Tags:
+
+* `v#`, `v#.#`, `v#.#.#` - semver releases (`major.minor.patch`)
+* `latest` - corresponds to most recently semver-tagged build
+* `edge` - latest buildable branch from `main`, likely unstable
+* `*-alpine` - alpine versions of above
 
 ## Running
 
