@@ -3,8 +3,6 @@
 name: CI
 on:
   push:
-    tags-ignore:
-      - unstable
   pull_request:
 
 env:
