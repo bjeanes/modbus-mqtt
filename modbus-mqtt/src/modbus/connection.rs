@@ -28,9 +28,9 @@ pub(crate) async fn run(
 
         let address_offset = config.address_offset;
 
-        const MAX_WAIT: usize = 300;
-        const START_WAIT: usize = 2;
-        let mut current_wait = START_WAIT;
+        const MAX_WAIT: usize = 35;
+        let mut current_wait = 1;
+        let mut next_wait = 1;
 
         loop {
             match config.settings.connect(config.unit).await {
@@ -57,13 +57,17 @@ pub(crate) async fn run(
                         mqtt.publish("last_error", format!("{error:?}"))
                             .await
                             .unwrap();
+
+                        // TODO, reset current_wait to 0 if it's been a while since it crashed.
+
                         tokio::time::sleep(std::time::Duration::from_secs(current_wait as u64))
                             .await;
 
                         let Connection { rx: r, tx: t, .. } = conn;
                         rx = r;
                         tx = t;
-                        current_wait = (current_wait * 2).clamp(START_WAIT, MAX_WAIT);
+                        (current_wait, next_wait) =
+                            (next_wait, (current_wait + next_wait).clamp(0, MAX_WAIT));
                     } else {
                         // we are shutting down here, so don't care if this fails
                         let send = mqtt.publish("state", "disconnected").await;
