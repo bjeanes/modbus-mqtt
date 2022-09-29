@@ -466,7 +466,7 @@ impl RegisterValueType {
                 }
             }
             T::String(RegisterString { .. }) => {
-                json!(String::from_utf16_lossy(words))
+                json!(String::from_utf8_lossy(&bytes).trim_end_matches(char::from(0)))
             }
             T::Array(RegisterArray { .. }) => todo!(),
         }
@@ -511,7 +511,7 @@ impl Register {
 use pretty_assertions::assert_eq;
 
 #[test]
-fn test_parse_1() {
+fn test_parse_numeric() {
     use serde_json::json;
 
     let reg = Register {
@@ -533,4 +533,28 @@ fn test_parse_1() {
     };
 
     assert_eq!(reg.parse_words(&[843, 0]), json!(843));
+}
+
+#[test]
+fn test_parse_string() {
+    use serde_json::json;
+
+    let reg = Register {
+        register_type: RegisterType::Input,
+        address: 42,
+        name: None,
+        interval: Default::default(),
+        parse: RegisterParse {
+            swap_bytes: Swap(false),
+            swap_words: Swap(false),
+            value_type: RegisterValueType::String(RegisterString { length: 10 }),
+        },
+    };
+
+    assert_eq!(
+        reg.parse_words(&[
+            0x6865, 0x6c6c, 0x6f20, 0x776f, 0x726c, 0x6400, 0x0000, 0x0000, 0x0000, 0x0000,
+        ]),
+        json!("hello world")
+    );
 }

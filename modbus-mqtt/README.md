@@ -86,7 +86,9 @@ If the connection is successful, you will see the following message like the fol
 
 #### Full connection examples
 
-All fields accepted (optional fields show defaults)
+Check the `examples/` directory for some examples and please feel free to share your own examples, noting the appropriate vendor/device info.
+
+The following JSON is all supported connection configuration fields, where the optional fields show the default values in use.
 
 ```jsonc
 {

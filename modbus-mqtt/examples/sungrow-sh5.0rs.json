@@ -9,14 +9,20 @@
             "type": "u32",
             "name": "dc_power",
             "swap_words": true,
-            "period": "1s"
+            "period": "500ms"
         },
         {
             "address": 13034,
             "type": "u32",
             "name": "active_power",
             "swap_words": true,
-            "period": "1s"
+            "period": "500ms"
+        },
+        {
+            "address": 4990,
+            "name": "serial_number",
+            "type": "string",
+            "length": 10
         },
         {
             "address": 5008,
@@ -26,23 +32,44 @@
             "scale": -1
         },
         {
+            "address": 5001,
+            "type": "u16",
+            "name": "nominal_output_power",
+            "period": "1m",
+            "scale": 2
+        },
+        {
             "address": 13008,
             "type": "s32",
             "name": "load_power",
             "swap_words": true,
-            "period": "1s"
+            "period": "500ms"
         },
         {
             "address": 13010,
             "type": "s32",
             "name": "export_power",
             "swap_words": true,
-            "period": "1s"
+            "period": "500ms"
+        },
+        {
+            "address": 13020,
+            "name": "battery_voltage",
+            "period": "3s",
+            "type": "u16",
+            "scale": -1
         },
         {
             "address": 13022,
             "name": "battery_power",
-            "period": "1s"
+            "period": "500ms"
+        },
+        {
+            "address": 13021,
+            "name": "battery_current",
+            "period": "500ms",
+            "type": "s16",
+            "scale": -1
         },
         {
             "address": 13023,
@@ -85,12 +112,12 @@
             "scale": -1
         },
         {
-            "address": 5012,
+            "address": 5013,
             "name": "mppt2_voltage",
             "scale": -1
         },
         {
-            "address": 5013,
+            "address": 5014,
             "name": "mppt2_current",
             "scale": -1
         },
@@ -118,6 +145,116 @@
             "address": 33148,
             "name": "forced_battery_power",
             "scale": 1
+        },
+        {
+            "address": 13002,
+            "type": "u16",
+            "name": "daily_pv_generation",
+            "scale": -1
+        },
+        {
+            "address": 13003,
+            "type": "u32",
+            "swap_words": true,
+            "name": "total_pv_generation",
+            "scale": -1
+        },
+        {
+            "address": 13005,
+            "type": "u16",
+            "name": "daily_export_energy",
+            "scale": -1
+        },
+        {
+            "address": 13006,
+            "type": "u32",
+            "swap_words": true,
+            "name": "total_export_energy",
+            "scale": -1
+        },
+        {
+            "address": 13012,
+            "type": "u16",
+            "name": "daily_battery_charge_energy",
+            "scale": -1
+        },
+        {
+            "address": 13013,
+            "type": "u32",
+            "swap_words": true,
+            "name": "total_battery_charge_energy",
+            "scale": -1
+        },
+        {
+            "address": 13026,
+            "type": "u16",
+            "name": "daily_battery_discharge_energy",
+            "scale": -1
+        },
+        {
+            "address": 13027,
+            "type": "u32",
+            "swap_words": true,
+            "name": "total_battery_discharge_energy",
+            "scale": -1
+        },
+        {
+            "address": 13017,
+            "type": "u16",
+            "name": "daily_direct_energy_consumption",
+            "scale": -1
+        },
+        {
+            "address": 13018,
+            "type": "u32",
+            "swap_words": true,
+            "name": "total_direct_energy_consumption",
+            "scale": -1
+        },
+        {
+            "address": 5003,
+            "type": "u16",
+            "name": "daily_output_energy",
+            "scale": -1
+        },
+        {
+            "address": 5004,
+            "type": "u32",
+            "swap_words": true,
+            "name": "total_output_energy",
+            "scale": -1
+        },
+        {
+            "address": 13029,
+            "type": "u16",
+            "name": "daily_self_consumption_rate",
+            "scale": -1
+        },
+        {
+            "address": 13036,
+            "type": "u16",
+            "name": "daily_import_energy",
+            "scale": -1
+        },
+        {
+            "address": 13037,
+            "type": "u32",
+            "swap_words": true,
+            "name": "total_import_energy",
+            "scale": -1
+        },
+        {
+            "address": 13040,
+            "type": "u16",
+            "name": "daily_charge_energy",
+            "scale": -1
+        },
+        {
+            "address": 13041,
+            "type": "u32",
+            "swap_words": true,
+            "name": "total_charge_energy",
+            "scale": -1
         }
     ]
 }
