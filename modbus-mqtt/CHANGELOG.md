@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning].
 
 ### Deprecated
 
-- Separate `holding` and `input` sections, in favour of specifying `register_type` field on the register definition to either `"input"` (default) or `"holding"`.
+- `holding` and `input` sections are no longer separate sections, in favour of specifying `register_type` field on the
+  register definition to either `"input"` (default) or `"holding"`.
 
 ## [0.2.0] - 2022-09-09
 
