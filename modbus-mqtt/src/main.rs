@@ -2,6 +2,7 @@ use clap::Parser;
 use modbus_mqtt::{server, Result};
 use rumqttc::MqttOptions;
 use tokio::select;
+use tracing::info;
 use url::Url;
 
 #[derive(Parser, Debug)]
@@ -37,9 +38,20 @@ async fn main() -> Result<()> {
     let options: MqttOptions = match url.clone().try_into() {
         Ok(options) => options,
         Err(rumqttc::OptionError::ClientId) => {
+            let client_id = format!("{}-{}", env!("CARGO_PKG_NAME"), {
+                use rand::distributions::Alphanumeric;
+                use rand::{thread_rng, Rng};
+
+                thread_rng()
+                    .sample_iter(&Alphanumeric)
+                    .take(6)
+                    .map(char::from)
+                    .collect::<String>()
+            });
+
             let url = url
                 .query_pairs_mut()
-                .append_pair("client_id", env!("CARGO_PKG_NAME"))
+                .append_pair("client_id", &client_id)
                 .finish()
                 .clone();
             url.try_into()?
@@ -48,7 +60,7 @@ async fn main() -> Result<()> {
     };
 
     if prefix.is_empty() {
-        prefix = options.client_id();
+        prefix = env!("CARGO_PKG_NAME").into();
     }
 
     let shutdown = async move {

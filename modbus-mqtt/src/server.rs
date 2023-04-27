@@ -6,7 +6,7 @@ use crate::{
 use rumqttc::MqttOptions;
 use std::future::Future;
 use tokio::sync::{broadcast, mpsc};
-use tracing::error;
+use tracing::{error, info};
 
 pub async fn run<P: Into<String> + Send>(
     prefix: P,
@@ -24,9 +24,11 @@ pub async fn run<P: Into<String> + Send>(
         qos: rumqttc::QoS::AtMostOnce,
         retain: false,
     });
+    let client_id = mqtt_options.client_id();
     let mut mqtt_connection = mqtt::new(mqtt_options).await;
     let mqtt = mqtt_connection.handle();
     mqtt.publish(prefix.clone(), "online").await?;
+    info!(client_id, "MQTT connection established");
 
     let mut connector = modbus::connector::new(
         mqtt.scoped(prefix),

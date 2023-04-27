@@ -946,6 +946,7 @@ dependencies = [
  "humantime-serde",
  "itertools",
  "pretty_assertions",
+ "rand",
  "rumqttc",
  "rust_decimal",
  "serde",

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning].
 
 ## [Unreleased]
 
+### Changed
+
+- Default MQTT client ID is now `modbus-mqtt-<rand>` instead of static `modbus-mqtt` to allow multiple instances to run.
+
 ### Deprecated
 
 - `holding` and `input` sections are no longer separate sections, in favour of specifying `register_type` field on the
