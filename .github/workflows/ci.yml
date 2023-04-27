@@ -137,7 +137,7 @@ jobs:
             ${{ runner.os }}-cargo-${{ steps.rust-toolchain.outputs.rustc_hash }}-
             ${{ runner.os }}-cargo
       - name: Setup cross linux toolchain
-        if: contains(matrix.TARGET, '-linux-') && !startsWith(matrix.TARGET, 'x86_64-')
+        if: false && contains(matrix.TARGET, '-linux-') && !startsWith(matrix.TARGET, 'x86_64-')
         run: |
           case "${{ matrix.TARGET }}" in
             i686-*) SYSTEM_ARCH=i386 ;;
