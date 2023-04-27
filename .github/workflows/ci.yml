@@ -177,7 +177,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -qqy ${{ matrix.DEPS }}
       - name: Configure linker
-        if: contains(matrix.TARGET, '-linux-')
+        if: false && contains(matrix.TARGET, '-linux-')
         run: |
           # some additional configuration for cross-compilation on linux
           # TODO: can this be done with `RUSTFLAGS += -C linker=$(DEB_HOST_GNU_TYPE)-gcc`?
