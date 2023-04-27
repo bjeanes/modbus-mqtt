@@ -2,7 +2,6 @@ use clap::Parser;
 use modbus_mqtt::{server, Result};
 use rumqttc::MqttOptions;
 use tokio::select;
-use tracing::info;
 use url::Url;
 
 #[derive(Parser, Debug)]
