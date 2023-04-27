@@ -243,7 +243,7 @@ jobs:
       - name: Set release version variable
         id: version
         run: |
-          echo ::set-output name=version::`git describe --long --always --tags --exclude unstable`
+          echo version=`git describe --long --always --tags --exclude unstable` >> $GITHUB_OUTPUT
 
       # This generates a space-sparated list of `$asset_name:assets/$file_name/$file_name`
       # strings by modifying the file_name to include the release version set
@@ -257,7 +257,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           files=$(ls -1 assets | perl -Wpe 's/^(modbus-mqtt)-(.*)$/$1-unstable-'$VERSION'-$2:assets\/$&\/*/g')
-          echo ::set-output name=files::`echo $files | xargs echo`
+          echo files=`echo $files | xargs echo` >> $GITHUB_OUTPUT
 
       # Deleting the release and tag to work around some downsides of the
       # meeDamian/github-release approach:
