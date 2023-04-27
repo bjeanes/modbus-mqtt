@@ -253,7 +253,6 @@ impl RunningState {
 
 // See Appendix 1.2 of Sungrow modbus documentation for hybrid inverters
 #[bitmask_enum::bitmask(u16)]
-#[derive(Debug)]
 pub enum RunningStateBits {
     GeneratingPVPower = 0b00000001,
     BatteryCharging = 0b00000010,
