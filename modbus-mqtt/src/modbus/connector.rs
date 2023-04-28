@@ -30,7 +30,8 @@ pub(crate) fn new(mqtt: mqtt::Handle, shutdown: Shutdown) -> Connector {
 
 impl Connector {
     pub async fn run(&mut self) -> crate::Result<()> {
-        let mut new_connection = self.mqtt.subscribe(TOPIC).await?;
+        debug!(mqtt = ?self.mqtt);
+        let mut new_connection = self.mqtt.subscribe_under(TOPIC).await?;
 
         loop {
             select! {
@@ -65,7 +66,7 @@ async fn parse_and_connect(
     shutdown: Shutdown,
 ) -> crate::Result<()> {
     match serde_json::from_slice(&bytes) {
-        Err(_) => mqtt.publish("state", "invalid").await?,
+        Err(_) => mqtt.publish("invalid").await?,
         Ok(Config {
             connection:
                 connection::Config {
@@ -73,7 +74,7 @@ async fn parse_and_connect(
                     ..
                 },
             ..
-        }) => mqtt.publish("state", "unknown_proto").await?,
+        }) => mqtt.publish("unknown_proto").await?,
         Ok(config) => {
             debug!(?config);
             connect(config, mqtt, shutdown).await?;
@@ -115,7 +116,8 @@ async fn connect(config: Config, mqtt: mqtt::Handle, shutdown: Shutdown) -> crat
                 };
 
                 let json = serde_json::to_vec(&reg).unwrap(); // unwrap() should be fine because we JUST deserialized it successfully
-                mqtt.publish(format!("{}/config", reg.path()), json).await?;
+                mqtt.publish_under(format!("{}/config", reg.path()), json)
+                    .await?;
             }
         }
     }

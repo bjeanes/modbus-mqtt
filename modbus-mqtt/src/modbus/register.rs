@@ -41,7 +41,7 @@ impl Monitor {
                         raw=%format!("{:04x?}", &words),
                     );
 
-                    if let Err(error) = self.mqtt.publish("state", value).await {
+                    if let Err(error) = self.mqtt.publish(value).await {
                         warn!(?error);
                         break;
                     }
@@ -69,7 +69,7 @@ impl Monitor {
 
 pub(crate) async fn subscribe(mqtt: &mqtt::Handle) -> crate::Result<mpsc::Receiver<Register>> {
     let (tx, rx) = mpsc::channel(8);
-    let mut registers = mqtt.subscribe("registers/+/config").await?;
+    let mut registers = mqtt.subscribe_under("registers/+/config").await?;
 
     tokio::spawn(async move {
         fn to_register(payload: &Payload) -> crate::Result<Register> {

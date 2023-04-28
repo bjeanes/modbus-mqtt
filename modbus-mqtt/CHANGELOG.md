@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning].
 ### Changed
 
 - Default MQTT client ID is now `modbus-mqtt-<rand>` instead of static `modbus-mqtt` to allow multiple instances to run.
+- Register values sent directly to register topic, not under `state` sub-topic
+- Modbus connection status sent directly to connection topic, not under `state` sub-topic
 
 ### Deprecated
 

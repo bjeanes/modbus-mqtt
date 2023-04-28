@@ -1,7 +1,4 @@
-use crate::{
-    modbus,
-    mqtt::{self, Scopable},
-};
+use crate::{modbus, mqtt};
 
 use rumqttc::MqttOptions;
 use std::future::Future;
@@ -26,12 +23,12 @@ pub async fn run<P: Into<String> + Send>(
     });
     let client_id = mqtt_options.client_id();
     let mut mqtt_connection = mqtt::new(mqtt_options).await;
-    let mqtt = mqtt_connection.handle();
-    mqtt.publish(prefix.clone(), "online").await?;
+    let mqtt = mqtt_connection.handle(prefix.clone());
+    mqtt.publish("online").await?;
     info!(client_id, "MQTT connection established");
 
     let mut connector = modbus::connector::new(
-        mqtt.scoped(prefix),
+        mqtt.clone(),
         (notify_shutdown.subscribe(), shutdown_complete_tx.clone()).into(),
     );
 

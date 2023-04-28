@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use bytes::Bytes;
 use rumqttc::{
     mqttbytes::matches as matches_topic, AsyncClient, Event, EventLoop, MqttOptions, Publish,
-    Subscribe, SubscribeFilter,
+    Subscribe,
 };
 use tokio::{
     select,
@@ -70,9 +70,9 @@ impl Connection {
         Ok(())
     }
 
-    pub fn handle(&self) -> Handle {
+    pub fn handle(&self, prefix: String) -> Handle {
         Handle {
-            prefix: None,
+            prefix,
             tx: self.tx.clone(),
         }
     }
@@ -86,7 +86,7 @@ impl Connection {
                 debug!(%topic, ?payload, "publish");
                 self.handle_data(topic, payload).await?;
             }
-            // e => debug!(event = ?e),
+            // event => debug!(?event),
             _ => {}
         }
 
@@ -131,6 +131,7 @@ impl Connection {
     }
 
     async fn handle_request(&mut self, request: Message) -> crate::Result<()> {
+        debug!(?request);
         match request {
             Message::Publish(Publish {
                 topic,
@@ -167,9 +168,9 @@ impl Connection {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Handle {
-    prefix: Option<String>,
+    prefix: String,
     tx: Sender<Message>,
 }
 
@@ -178,37 +179,48 @@ pub struct Handle {
 // implemented to use serde_json but for Bytes and Vec<u8> it would just return itself.
 // The return values may need to be crate::Result<Receiver<Option<T>> or crate::Result<Receiver<crate::Result<T>>>.
 impl Handle {
-    pub async fn subscribe<S: Into<String>>(&self, topic: S) -> crate::Result<Receiver<Payload>> {
+    pub async fn subscribe(&self) -> crate::Result<Receiver<Payload>> {
         let (tx_bytes, rx) = mpsc::channel(8);
-        let mut msg =
-            Message::Subscribe(Subscribe::new(topic, rumqttc::QoS::AtLeastOnce), tx_bytes);
-        if let Some(prefix) = &self.prefix {
-            msg = msg.scoped(prefix.to_owned());
-        }
+
+        let msg = Message::Subscribe(
+            Subscribe::new(&self.prefix, rumqttc::QoS::AtLeastOnce),
+            tx_bytes,
+        );
         self.tx
             .send(msg)
             .await
             .map_err(|_| crate::Error::SendError)?;
         Ok(rx)
     }
-    pub async fn publish<S: Into<String>, B: Into<Bytes>>(
+
+    /// subscribe_under is a convenience method for subscribing to a topic underneath our topic prefix
+    pub async fn subscribe_under<S: Into<String>>(
         &self,
         topic: S,
-        payload: B,
-    ) -> crate::Result<()> {
-        let mut msg = Message::Publish(Publish::new(
-            topic,
+    ) -> crate::Result<Receiver<Payload>> {
+        self.scoped(topic).subscribe().await
+    }
+
+    pub async fn publish<B: Into<Bytes>>(&self, payload: B) -> crate::Result<()> {
+        let msg = Message::Publish(Publish::new(
+            &self.prefix,
             rumqttc::QoS::AtLeastOnce,
             payload.into(),
         ));
-        if let Some(prefix) = &self.prefix {
-            msg = msg.scoped(prefix.to_owned());
-        }
         self.tx
             .send(msg)
             .await
             .map_err(|_| crate::Error::SendError)?;
         Ok(())
+    }
+
+    /// publish_under is a convenience method for publishing to a topic underneath our topic prefix
+    pub async fn publish_under<S: Into<String>, B: Into<Bytes>>(
+        &self,
+        topic: S,
+        payload: B,
+    ) -> crate::Result<()> {
+        self.scoped(topic).publish(payload).await
     }
 
     pub async fn shutdown(self) -> crate::Result<()> {
@@ -227,59 +239,9 @@ pub(crate) trait Scopable {
 // trait, like: Scopable
 impl Scopable for Handle {
     fn scoped<S: Into<String>>(&self, prefix: S) -> Self {
-        match self {
-            Self { prefix: None, tx } => Self {
-                prefix: Some(prefix.into()),
-                tx: tx.clone(),
-            },
-            Self {
-                prefix: Some(existing),
-                tx,
-            } => Self {
-                prefix: Some(format!("{}/{}", existing, prefix.into())),
-                tx: tx.clone(),
-            },
-        }
-    }
-}
-
-impl Scopable for Message {
-    fn scoped<S: Into<String>>(&self, prefix: S) -> Self {
-        match self {
-            Message::Subscribe(sub, bytes) => Message::Subscribe(sub.scoped(prefix), bytes.clone()),
-            Message::Publish(publish) => Message::Publish(publish.scoped(prefix)),
-            other => (*other).clone(),
-        }
-    }
-}
-
-impl Scopable for Subscribe {
-    fn scoped<S: Into<String>>(&self, prefix: S) -> Self {
-        let prefix: String = prefix.into();
         Self {
-            pkid: self.pkid,
-            filters: self
-                .filters
-                .iter()
-                .map(|f| f.clone().scoped(prefix.clone()))
-                .collect(),
-        }
-    }
-}
-
-impl Scopable for Publish {
-    fn scoped<S: Into<String>>(&self, prefix: S) -> Self {
-        let mut prefixed = self.clone();
-        prefixed.topic = format!("{}/{}", prefix.into(), &self.topic);
-        prefixed
-    }
-}
-
-impl Scopable for SubscribeFilter {
-    fn scoped<S: Into<String>>(&self, prefix: S) -> Self {
-        SubscribeFilter {
-            path: format!("{}/{}", prefix.into(), &self.path),
-            qos: self.qos,
+            prefix: format!("{}/{}", self.prefix, prefix.into()),
+            ..self.clone()
         }
     }
 }

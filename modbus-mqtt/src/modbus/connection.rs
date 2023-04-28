@@ -24,7 +24,7 @@ pub(crate) async fn run(
 
     tokio::spawn(async move {
         // Can unwrap because if MQTT handler is bad, we have nothing to do here.
-        mqtt.publish("state", "connecting").await.unwrap();
+        mqtt.publish("connecting").await.unwrap();
 
         let address_offset = config.address_offset;
 
@@ -36,7 +36,7 @@ pub(crate) async fn run(
             match config.settings.connect(config.unit).await {
                 Ok(client) => {
                     // Can unwrap because if MQTT handler is bad, we have nothing to do here.
-                    mqtt.publish("state", "connected").await.unwrap();
+                    mqtt.publish("connected").await.unwrap();
 
                     let mut conn = Connection {
                         address_offset,
@@ -53,8 +53,8 @@ pub(crate) async fn run(
 
                     if let Err(error) = result {
                         error!(?error, "Modbus connection failed");
-                        mqtt.publish("state", "error").await.unwrap();
-                        mqtt.publish("last_error", format!("{error:?}"))
+                        mqtt.publish("error").await.unwrap();
+                        mqtt.publish_under("last_error", format!("{error:?}"))
                             .await
                             .unwrap();
 
@@ -70,7 +70,7 @@ pub(crate) async fn run(
                             (next_wait, (current_wait + next_wait).clamp(0, MAX_WAIT));
                     } else {
                         // we are shutting down here, so don't care if this fails
-                        let send = mqtt.publish("state", "disconnected").await;
+                        let send = mqtt.publish("disconnected").await;
                         debug!(?config, ?send, "shutting down modbus connection");
                         break;
                     }
