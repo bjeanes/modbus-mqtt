@@ -65,7 +65,7 @@ For a full list of supported options, check [the MQTT client library's source co
 
 ### Connecting to Modbus devices
 
-To connect to a Modbus device, you need to post the connection details to MQTT under a topic of `$prefix/$connection_id/connect`. It is intended that such messages are marked as **retained** so that ModbusMQTT reconnects to your devices when it restarts.
+To connect to a Modbus device, you need to post the connection details to MQTT under a topic of `$prefix/$connection_id/connect`. It is intended that such messages are marked as **retained** so that ModbusMQTT reconnects to your devices when it restarts or if it crashes.
 
 For instance, a simple config might be:
 
@@ -121,7 +121,7 @@ The following JSON is all supported connection configuration fields, where the o
 
 #### Monitoring registers
 
-Post to `$MODBUS_MQTT_TOPIC/$CONNECTION_ID/$TYPE/$ADDRESS` where `$TYPE` is one of `input` or `holding` with the following payload (optional fields show defaults):
+Post to `$MODBUS_MQTT_TOPIC/$CONNECTION_ID/$ADDRESS` with the following payload (optional fields show defaults):
 
 ```jsonc
 {
