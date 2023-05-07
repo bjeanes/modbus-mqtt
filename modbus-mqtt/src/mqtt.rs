@@ -235,8 +235,6 @@ pub(crate) trait Scopable {
     fn scoped<S: Into<String>>(&self, prefix: S) -> Self;
 }
 
-// FIXME: this doesn't actually _prefix_ it _appends_ to the existing prefix, so there's probably a better name for this
-// trait, like: Scopable
 impl Scopable for Handle {
     fn scoped<S: Into<String>>(&self, prefix: S) -> Self {
         Self {
