@@ -165,5 +165,7 @@ TODO: set up something like https://hub.docker.com/r/oitc/modbus-server to test 
 ## Similar projects
 
 * https://github.com/Instathings/modbus2mqtt
+  * https://github.com/mbs38/spicierModbus2mqtt
+* https://github.com/BlackZork/mqmgateway
 * https://github.com/TenySmart/ModbusTCP2MQTT - Sungrow inverter specific
 * https://github.com/bohdan-s/SunGather - Sungrow inverter specific
