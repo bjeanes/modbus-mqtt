@@ -1,6 +1,7 @@
+# syntax=docker/dockerfile:1.7-labs
 # -*- mode: dockerfile -*-
 
-FROM rust:1.63-alpine AS builder
+FROM rust:1.79-alpine AS builder
 
 RUN apk add --no-cache musl-dev
 
@@ -9,11 +10,8 @@ RUN USER=rust cargo new /home/rust/sungrow-winets
 RUN USER=rust cargo new /home/rust/tokio_modbus-winets
 RUN USER=rust cargo new /home/rust/modbus-mqtt
 WORKDIR /home/rust/modbus-mqtt
-ADD --chown=rust:rust Cargo.lock modbus-mqtt/Cargo.toml ./
+COPY --parents --chown=rust:rust Cargo.lock */Cargo.toml ./
 RUN cargo build --release
-
-# # Delete files & directories which shouldn't exist for the workspace
-# RUN rm -rf src
 
 # Add our source code.
 ADD --chown=rust:rust . ./

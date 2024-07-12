@@ -1,6 +1,7 @@
+# syntax=docker/dockerfile:1.7-labs
 # -*- mode: dockerfile -*-
 
-FROM rust:1.63 AS builder
+FROM rust:1.79 AS builder
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -12,14 +13,11 @@ RUN USER=rust cargo new /home/rust/sungrow-winets
 RUN USER=rust cargo new /home/rust/tokio_modbus-winets
 RUN USER=rust cargo new /home/rust/modbus-mqtt
 WORKDIR /home/rust/modbus-mqtt
-ADD --chown=rust:rust Cargo.lock modbus-mqtt/Cargo.toml ./
+COPY --parents --chown=rust:rust Cargo.lock */Cargo.toml ./
 RUN mkdir -p /home/rust/modbus-mqtt/target/release
 RUN --mount=type=cache,target=/home/rust/modbus-mqtt/target,sharing=locked \
     --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     cargo build --release
-
-# # Delete files & directories which shouldn't exist for the workspace
-# RUN rm -rf src
 
 # Add our source code.
 ADD --chown=rust:rust . ./
