@@ -1,6 +1,12 @@
 [env]
 CC_aarch64_unknown_linux_musl = "aarch64-linux-gnu-gcc"
 
+### # but how to actually create the sysroot? https://github.com/windelbouwman/sysroot-creator ?
+### # use `[target.aarch64-unknown-linux-gnu]` to set wrapper script which builds sysroot and sets these vars?
+# # https://github.com/rust-lang/pkg-config-rs?tab=readme-ov-file#external-configuration-via-target-scoped-environment-variables
+# PKG_CONFIG_SYSROOT_DIR_aarch64_unknown_linux_gnu = "/usr/aarch64-linux-gnu"
+# PKG_CONFIG_PATH_aarch64_unknown_linux_gnu = "/usr/aarch64-linux-gnu/lib/pkgconfig"
+
 [target.aarch64-unknown-linux-gnu]
 linker = "aarch64-linux-gnu-gcc"
 
