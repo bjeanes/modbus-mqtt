@@ -31,7 +31,7 @@ publish-jobs = ["./release-docker"]
 # Whether to install an updater program
 install-updater = false
 # Whether CI should trigger releases with dispatches instead of tag pushes
-dispatch-releases = false
+dispatch-releases = true
 # A GitHub repo to push Homebrew formulas to
 tap = "bjeanes/homebrew-tap"
 # Publish jobs to run in CI
