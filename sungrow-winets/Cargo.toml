@@ -1,6 +1,6 @@
 [package]
 name = "sungrow-winets"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["Bo Jeanes <me@bjeanes.com>"]
 description = "A rudimentary client for programmatically interacting with Sungrow inverters which are using a WiNet-S dongle for network connectivity."

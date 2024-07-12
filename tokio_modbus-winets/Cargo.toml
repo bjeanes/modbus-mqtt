@@ -1,6 +1,6 @@
 [package]
 name = "tokio_modbus-winets"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["Bo Jeanes <me@bjeanes.com>"]
 license = "MIT"
@@ -11,6 +11,6 @@ repository = "https://github.com/bjeanes/modbus-mqtt"
 
 [dependencies]
 async-trait = "0.1.57"
-sungrow-winets = { version = "0.2.0", path = "../sungrow-winets" }
+sungrow-winets = { version = "0.2.1", path = "../sungrow-winets" }
 tokio-modbus = { version = "0.7.1", default-features = false }
 tracing = "0.1.36"
