@@ -8,7 +8,6 @@ on:
 env:
   NAME: modbus-mqtt
   CARGO_TERM_COLOR: always
-  PKG_CONFIG_ALLOW_CROSS: 1
 
 jobs:
   tests:
@@ -28,6 +27,7 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get clean && sudo apt-get update
           sudo apt-get install -y pkg-config  libudev-dev
+
       - name: Cargo cache
         uses: actions/cache@v2
         with:
@@ -39,6 +39,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-${{ steps.rust-toolchain.outputs.rustc_hash }}-
             ${{ runner.os }}-cargo
+
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
@@ -62,6 +63,7 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get clean && sudo apt-get update
           sudo apt-get install -y pkg-config  libudev-dev
+
       - name: Cargo cache
         uses: actions/cache@v2
         with:
@@ -73,6 +75,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-${{ steps.rust-toolchain.outputs.rustc_hash }}-
             ${{ runner.os }}-cargo
+
       - name: Check rustfmt
         uses: actions-rs/cargo@v1
         with:
@@ -85,313 +88,8 @@ jobs:
           command: clippy
           args: -- -D clippy::all
 
-  build:
-    name: Build ${{matrix.TARGET}}
-    needs:
-      - tests
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - TARGET: x86_64-unknown-linux-gnu
-            OS: ubuntu-latest
-            DEPS: libudev-dev
-          - TARGET: x86_64-unknown-linux-musl
-            OS: ubuntu-latest
-          - TARGET: aarch64-unknown-linux-gnu
-            OS: ubuntu-latest
-            DEPS: libudev-dev:arm64
-          - TARGET: aarch64-unknown-linux-musl
-            OS: ubuntu-latest
-          - TARGET: armv7-unknown-linux-gnueabihf
-            OS: ubuntu-latest
-            DEPS: libudev-dev:armhf
-          - TARGET: armv7-unknown-linux-musleabihf
-            OS: ubuntu-latest
-          - TARGET: arm-unknown-linux-gnueabihf
-            OS: ubuntu-latest
-            DEPS: libudev-dev:armhf
-          - TARGET: arm-unknown-linux-musleabihf
-            OS: ubuntu-latest
-          - TARGET: x86_64-apple-darwin
-            OS: macos-latest
-          - TARGET: aarch64-apple-darwin
-            OS: macos-latest
-          - TARGET: x86_64-pc-windows-msvc
-            OS: windows-latest
-    runs-on: ${{ matrix.OS }}
-    steps:
-      - uses: actions/checkout@v2
-      - name: Cargo cache
-        uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cargo/git
-            ~/.cargo/registry
-            ./target
-          key: ${{ runner.os }}-cargo-${{matrix.TARGET}}-${{ steps.rust-toolchain.outputs.rustc_hash }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-${{matrix.TARGET}}-${{ steps.rust-toolchain.outputs.rustc_hash }}
-            ${{ runner.os }}-cargo-${{matrix.TARGET}}-
-            ${{ runner.os }}-cargo-${{ steps.rust-toolchain.outputs.rustc_hash }}-${{ hashFiles('**/Cargo.lock') }}
-            ${{ runner.os }}-cargo-${{ steps.rust-toolchain.outputs.rustc_hash }}-
-            ${{ runner.os }}-cargo
-      - name: Setup cross linux toolchain
-        if: contains(matrix.TARGET, '-linux-') && !startsWith(matrix.TARGET, 'x86_64-')
-        run: |
-          case "${{ matrix.TARGET }}" in
-            i686-*) SYSTEM_ARCH=i386 ;;
-            arm*) SYSTEM_ARCH=armhf ;;
-            aarch64*) SYSTEM_ARCH=arm64 ;;
-          esac
-          GCC_TARGET=$(printf "${{ matrix.TARGET }}" | sed 's/-unknown-/-/' | sed 's/arm[^-]*/arm/g' | sed 's/musl/gnu/g')
-          ENV_TARGET=$(printf "${{ matrix.TARGET }}" | tr '-' '_')
-          ENV_TARGET_UC=$(printf "${ENV_TARGET}" | tr '[[:lower:]]' '[[:upper:]]')
-          sudo rm -f /etc/apt/sources.list.d/*.list
-          case "${{ matrix.TARGET }}" in
-            arm* | aarch64*)
-          sudo tee /etc/apt/sources.list << EOF
-          deb [arch=i386,amd64] http://archive.ubuntu.com/ubuntu/ focal main universe
-          deb [arch=i386,amd64] http://archive.ubuntu.com/ubuntu/ focal-updates main universe
-          deb [arch=i386,amd64] http://security.ubuntu.com/ubuntu/ focal-security main universe
-          deb [arch=armhf,arm64] http://ports.ubuntu.com/ubuntu-ports/ focal main universe
-          deb [arch=armhf,arm64] http://ports.ubuntu.com/ubuntu-ports/ focal-updates main universe
-          deb [arch=armhf,arm64] http://ports.ubuntu.com/ubuntu-ports/ focal-security main universe
-          EOF
-              ;;
-          esac
-          sudo dpkg --add-architecture ${SYSTEM_ARCH}
-          dpkg --print-foreign-architectures
-          sudo apt-get update -qqy
-          sudo apt-get --fix-broken install
-          sudo apt-get install -qqy --fix-broken -o Debug::pkgProblemResolver=yes crossbuild-essential-${SYSTEM_ARCH} pkg-config-${GCC_TARGET}
-          echo "SYSTEM_ARCH=${SYSTEM_ARCH}" >> $GITHUB_ENV
-          echo "CARGO_TARGET_${ENV_TARGET_UC}_LINKER=${GCC_TARGET}-gcc" >> $GITHUB_ENV
-          echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
-          echo "PKG_CONFIG_${ENV_TARGET}=${GCC_TARGET}-pkg-config" >> $GITHUB_ENV
-          echo "PKG_CONFIG=${GCC_TARGET}-pkg-config" >> $GITHUB_ENV
-          echo "BINDGEN_EXTRA_CLANG_ARGS=\"-L/usr/lib/${GCC_TARGET} -L/lib/${GCC_TARGET}\"" >> $GITHUB_ENV
-      - name: Install dependencies
-        if: contains(matrix.TARGET, '-linux-') && matrix.DEPS
-        run: |
-          sudo apt-get update
-          sudo apt-get install -qqy ${{ matrix.DEPS }}
-      - name: Configure linker
-        if: contains(matrix.TARGET, '-linux-')
-        run: |
-          # some additional configuration for cross-compilation on linux
-          # TODO: can this be done with `RUSTFLAGS += -C linker=$(DEB_HOST_GNU_TYPE)-gcc`?
-
-          cat >>~/.cargo/config <<EOF
-          [target.aarch64-unknown-linux-gnu]
-          linker = "aarch64-linux-gnu-gcc"
-          [target.aarch64-unknown-linux-musl]
-          linker = "aarch64-linux-gnu-gcc"
-          [target.armv7-unknown-linux-gnueabihf]
-          linker = "arm-linux-gnueabihf-gcc"
-          [target.armv7-unknown-linux-musleabihf]
-          linker = "arm-linux-gnueabihf-gcc"
-          [target.arm-unknown-linux-gnueabihf]
-          linker = "arm-linux-gnueabihf-gcc"
-          [target.arm-unknown-linux-musleabihf]
-          linker = "arm-linux-gnueabihf-gcc"
-          EOF
-      - name: Install rust target
-        run: rustup target add ${{ matrix.TARGET }}
-      - name: Run build
-        run: cargo build --release --verbose --target ${{ matrix.TARGET }}
-
-      - name: Package asset as gzip
-        if: "!startsWith(matrix.OS, 'windows')"
-        run: env GZIP=-9 tar zvcf modbus-mqtt.tar.gz -C ./target/${{ matrix.TARGET }}/release modbus-mqtt
-
-      - name: Package asset as zip
-        if: startsWith(matrix.OS, 'windows')
-        run: |
-          Compress-Archive -LiteralPath .\target\${{ matrix.TARGET }}\release\modbus-mqtt.exe -DestinationPath modbus-mqtt.zip
-
-      - name: Upload gzipped artifact
-        if: "!startsWith(matrix.OS, 'windows')"
-        uses: actions/upload-artifact@v2
-        with:
-          name: modbus-mqtt-${{ matrix.TARGET }}.tar.gz
-          path: modbus-mqtt.tar.gz
-
-      - name: Upload zipped artifact
-        if: startsWith(matrix.OS, 'windows')
-        uses: actions/upload-artifact@v2
-        with:
-          name: modbus-mqtt-${{ matrix.TARGET }}.zip
-          path: modbus-mqtt.zip
-
-  prerelease:
-    name: Create a pre-release
-    if: github.ref == 'refs/heads/main'
-    needs:
-      - build
-      - docker
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Download built assets from workflow artifacts
-        uses: actions/download-artifact@v2
-        with:
-          path: assets/
-
-      - name: Set release version variable
-        id: version
-        run: |
-          echo ::set-output name=version::`git describe --long --always --tags --exclude unstable`
-
-      # This generates a space-sparated list of `$asset_name:assets/$file_name/$file_name`
-      # strings by modifying the file_name to include the release version set
-      # above.
-      #
-      # The `actions/download-artifact` action puts each artifact in its own
-      # directory, even when it is a single file.
-      - name: Build list of artifacts
-        id: artifacts
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          files=$(ls -1 assets | perl -Wpe 's/^(modbus-mqtt)-(.*)$/$1-unstable-'$VERSION'-$2:assets\/$&\/*/g')
-          echo ::set-output name=files::`echo $files | xargs echo`
-
-      # Deleting the release and tag to work around some downsides of the
-      # meeDamian/github-release approach:
-      #
-      # 1. Tag is left pointing to the original release
-      # 2. Release is updated but its timestamp will be the time of original release
-      #
-      # Simply deleting the tag (e.g. `git push --delete origin unstable`) will
-      # work from a public-facing standpoint, but it leaves behind a lot of
-      # draft releases for the releases which were associated with the tag at
-      # the time it was deleted.
-      - name: Delete `unstable` tag and associated GH Release
-        uses: dev-drprasad/delete-tag-and-release@v0.1.2
-        if: ${{ !env.ACT }}
-        with:
-          delete_release: true
-          tag_name: unstable
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Extract latest changelog entry
-      - name: Get Changelog Entry
-        id: changelog_reader
-        uses: mindsers/changelog-reader-action@v2.2.0
-        with:
-          path: ./modbus-mqtt/CHANGELOG.md
-          version: Unreleased
-
-      # Upserts the pre-release
-      - name: Create GH Release and `unstable` tag for current commit
-        if: ${{ !env.ACT }}
-        uses: meeDamian/github-release@2.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          allow_override: true
-          prerelease: true
-          tag: unstable
-          commitish: ${{ github.sha }}
-          name: "Unstable (built from master)"
-          body: ${{ steps.changelog_reader.outputs.changes }}
-          files: ${{ steps.artifacts.outputs.files }}
-          gzip: false
-
   docker:
     if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
     needs:
       - tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ${{ github.repository }}
-            ghcr.io/${{ github.repository }}
-          tags: |
-            type=sha,format=short
-            type=edge,branch=main
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}},enable=${{ !contains(github.ref, 'v0.') }}
-            type=ref,enable=true,priority=600,prefix=br-,suffix=,event=branch
-            type=ref,enable=true,priority=600,prefix=,suffix=,event=tag
-            type=ref,enable=true,priority=600,prefix=pr-,suffix=,event=pr
-
-      - name: Docker meta
-        id: meta-alpine
-        uses: docker/metadata-action@v5
-        with:
-          flavor:
-            suffix=-alpine
-          images: |
-            ${{ github.repository }}
-            ghcr.io/${{ github.repository }}
-          tags: |
-            type=sha,format=short
-            type=edge,branch=main
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}},enable=${{ !contains(github.ref, 'v0.') }}
-            type=ref,enable=true,priority=600,prefix=br-,suffix=,event=branch
-            type=ref,enable=true,priority=600,prefix=,suffix=,event=tag
-            type=ref,enable=true,priority=600,prefix=pr-,suffix=,event=pr
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        if: ${{ !env.ACT }}
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Login to DockerHub
-        uses: docker/login-action@v3
-        if: ${{ !env.ACT }}
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build and push (alpine)
-        uses: docker/build-push-action@v3
-        with:
-          context: .
-          platforms: |
-            linux/arm64
-            linux/amd64
-          push: ${{ !env.ACT }}
-          file: Dockerfile.alpine
-          tags: ${{ steps.meta-alpine.outputs.tags }}
-          labels: ${{ steps.meta-alpine.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and push
-        uses: docker/build-push-action@v3
-        with:
-          context: .
-          # Disabled due to https://github.com/docker/buildx/issues/395
-            # linux/arm/v7
-          platforms: |
-            linux/arm64
-            linux/amd64
-          push: ${{ !env.ACT }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+    uses: ./.github/workflows/release-docker.yml

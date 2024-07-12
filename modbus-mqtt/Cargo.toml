@@ -41,3 +41,6 @@ winet-s = ["dep:tokio_modbus-winets"]
 ws = ["rumqttc/websocket"]
 tls = ["rustls"]
 rustls = ["rumqttc/use-rustls"]
+
+[package.metadata.dist]
+features = ["default", "ws", "tls"]
