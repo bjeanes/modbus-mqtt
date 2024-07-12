@@ -42,7 +42,7 @@ aarch64-apple-darwin = "macos-14"
 x86_64-apple-darwin = "macos-14"
 
 [workspace.metadata.dist.dependencies.apt]
-aarch64-linux-gnu-gcc = { version = "*", targets = ["aarch64-unknown-linux-gnu", "aarch64-unknown-linux-musl"] }
+gcc-aarch64-linux-gnu = { version = "*", targets = ["aarch64-unknown-linux-gnu", "aarch64-unknown-linux-musl"] }
 libudev-dev = { version = "*", targets = ["x86_64-unknown-linux-gnu"] }
 
 # The profile that 'cargo dist' will build withgithub-attestations = true
