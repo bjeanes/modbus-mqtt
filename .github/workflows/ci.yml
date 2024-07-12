@@ -93,3 +93,4 @@ jobs:
     needs:
       - tests
     uses: ./.github/workflows/release-docker.yml
+    secrets: inherit
