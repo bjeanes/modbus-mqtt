@@ -271,6 +271,7 @@ jobs:
       # the time it was deleted.
       - name: Delete `unstable` tag and associated GH Release
         uses: dev-drprasad/delete-tag-and-release@v0.1.2
+        if: ${{ !env.ACT }}
         with:
           delete_release: true
           tag_name: unstable
@@ -287,6 +288,7 @@ jobs:
 
       # Upserts the pre-release
       - name: Create GH Release and `unstable` tag for current commit
+        if: ${{ !env.ACT }}
         uses: meeDamian/github-release@2.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -352,6 +354,7 @@ jobs:
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v2
+        if: ${{ !env.ACT }}
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -359,6 +362,7 @@ jobs:
 
       - name: Login to DockerHub
         uses: docker/login-action@v2
+        if: ${{ !env.ACT }}
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -377,7 +381,7 @@ jobs:
           platforms: |
             linux/arm64
             linux/amd64
-          push: true
+          push: ${{ !env.ACT }}
           file: Dockerfile.alpine
           tags: ${{ steps.meta-alpine.outputs.tags }}
           labels: ${{ steps.meta-alpine.outputs.labels }}
@@ -393,7 +397,7 @@ jobs:
           platforms: |
             linux/arm64
             linux/amd64
-          push: true
+          push: ${{ !env.ACT }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
