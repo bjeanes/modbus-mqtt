@@ -73,7 +73,7 @@ static DEFAULT_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CAR
 impl ClientBuilder {
     pub fn new(host: String) -> Self {
         Self {
-            host: host.into(),
+            host,
             username: DEFAULT_USERNAME.into(),
             password: DEFAULT_PASSWORD.into(),
             user_agent: DEFAULT_USER_AGENT.into(),
@@ -113,9 +113,9 @@ impl ClientBuilder {
 
         Ok(Client {
             host: self.host,
-            username: self.username.into(),
-            password: self.password.into(),
-            token: self.token.into(),
+            username: self.username,
+            password: self.password,
+            token: self.token,
             devices: vec![],
             http,
         })
@@ -137,7 +137,7 @@ impl ClientBuilder {
     }
 
     pub fn user_agent(mut self, user_agent: String) -> Self {
-        self.user_agent = user_agent.into();
+        self.user_agent = user_agent;
         self
     }
 
