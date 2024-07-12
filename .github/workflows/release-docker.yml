@@ -82,8 +82,8 @@ jobs:
           file: Dockerfile.alpine
           tags: ${{ steps.meta-alpine.outputs.tags }}
           labels: ${{ steps.meta-alpine.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=docker-alpine
+          cache-to: type=gha,scope=docker-alpine,mode=max
 
       - name: Build and push
         uses: docker/build-push-action@v3
@@ -95,5 +95,5 @@ jobs:
           push: ${{ !env.ACT }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=docker
+          cache-to: type=gha,scope=docker,mode=max
