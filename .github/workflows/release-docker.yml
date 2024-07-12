@@ -31,7 +31,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}},enable=${{ !contains(github.ref, 'v0.') }}
-            type=ref,enable=true,priority=600,prefix=br-,event=branch
+            type=ref,enable=true,priority=600,prefix=br-,event=branch,enable=${{ github.ref != 'refs/heads/main' }}
             type=ref,enable=true,priority=600,prefix=,event=tag
             type=ref,enable=true,priority=600,prefix=pr-,event=pr
 
@@ -49,7 +49,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}},enable=${{ !contains(github.ref, 'v0.') }}
-            type=ref,enable=true,priority=600,prefix=br-,event=branch
+            type=ref,enable=true,priority=600,prefix=br-,event=branch,enable=${{ github.ref != 'refs/heads/main' }}
             type=ref,enable=true,priority=600,prefix=,event=tag
             type=ref,enable=true,priority=600,prefix=pr-,event=pr
 
