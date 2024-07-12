@@ -1,4 +1,9 @@
 .git
+
+# This file holds linker overrides for cross-compilation which do not apply inside Docker builds; including it causes
+# Docker builds for certain architectures to fail.
+.cargo/config.toml
+
 Dockerfile
 README.md
 /target/
