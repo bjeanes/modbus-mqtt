@@ -23,7 +23,8 @@ async fn main() -> Result<(), Error> {
     )
     .expect("invalid uint");
 
-    let client = Client::new(host).await?;
+    let mut client = ClientBuilder::new(host).build()?;
+    client.connect().await?;
 
     let was = client
         .read_register(RegisterType::Holding, 33148, 1)

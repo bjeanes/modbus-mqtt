@@ -10,7 +10,8 @@ async fn main() -> Result<(), Error> {
         .nth(1)
         .expect("must pass host/IP of WiNet-S as first argument");
 
-    let client = Client::new(host).await?;
+    let mut client = ClientBuilder::new(host).build()?;
+    client.connect().await?;
 
     let mut tick = tokio::time::interval(Duration::from_millis(200));
     loop {

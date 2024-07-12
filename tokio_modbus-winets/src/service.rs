@@ -21,7 +21,8 @@ pub struct Context {
 
 impl Context {
     async fn new(host: String) -> Result<Self, Error> {
-        let service = sungrow_winets::Client::new(&host).await?;
+        let mut service = sungrow_winets::ClientBuilder::new(host).build()?;
+        service.connect().await?;
         Ok(Self { service })
     }
 }

@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use serde_aux::prelude::*;
+use std::time::Duration;
 use thiserror::Error;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use tracing::{debug, error};
@@ -12,6 +13,9 @@ pub enum Error {
 
     #[error(transparent)]
     HttpErr(#[from] reqwest::Error),
+
+    #[error(transparent)]
+    HttpHdrErr(#[from] reqwest::header::InvalidHeaderValue),
 
     // Thank you stranger https://github.com/dtolnay/thiserror/pull/175
     #[error("{code}{}", match .message {
@@ -43,104 +47,237 @@ impl From<Error> for std::io::Error {
 pub struct Client {
     http: reqwest::Client,
     host: String,
-    token: String,
+    username: String,
+    password: String,
+    token: Option<String>,
     devices: Vec<Device>,
 }
 
-const WS_PORT: u16 = 8082;
+pub struct ClientBuilder {
+    host: String,
+    username: String,
+    password: String,
+    token: Option<String>,
+    user_agent: String,
+
+    read_timeout: Option<Duration>,
+    connect_timeout: Option<Duration>,
+    timeout: Option<Duration>,
+}
+
+// These are Sungrow's default passwords on the WiNet-S, but they are user-changeable
+static DEFAULT_USERNAME: &str = "admin";
+static DEFAULT_PASSWORD: &str = "pw8888";
+static DEFAULT_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
+
+impl ClientBuilder {
+    pub fn new(host: String) -> Self {
+        Self {
+            host: host.into(),
+            username: DEFAULT_USERNAME.into(),
+            password: DEFAULT_PASSWORD.into(),
+            user_agent: DEFAULT_USER_AGENT.into(),
+            token: None,
+
+            connect_timeout: Some(Duration::from_secs(1)),
+            read_timeout: Some(Duration::from_secs(1)),
+            timeout: Some(Duration::from_secs(1)),
+        }
+    }
+
+    pub fn build(self) -> Result<Client> {
+        use reqwest::header;
+
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert(header::ACCEPT, "application/json".parse()?);
+        headers.insert(header::CONNECTION, "keep-alive".parse()?);
+
+        let mut http_builder = reqwest::ClientBuilder::new()
+            .user_agent(header::HeaderValue::from_str(&self.user_agent)?)
+            .default_headers(headers)
+            .pool_max_idle_per_host(1)
+            .redirect(reqwest::redirect::Policy::none())
+            .referer(false);
+
+        if let Some(timeout) = self.timeout {
+            http_builder = http_builder.timeout(timeout);
+        }
+        if let Some(timeout) = self.connect_timeout {
+            http_builder = http_builder.connect_timeout(timeout);
+        }
+        if let Some(timeout) = self.read_timeout {
+            http_builder = http_builder.read_timeout(timeout);
+        }
+
+        let http = http_builder.build()?;
+
+        Ok(Client {
+            host: self.host,
+            username: self.username.into(),
+            password: self.password.into(),
+            token: self.token.into(),
+            devices: vec![],
+            http,
+        })
+    }
+
+    pub fn username(mut self, username: String) -> Self {
+        self.username = username;
+        self
+    }
+
+    pub fn password(mut self, password: String) -> Self {
+        self.password = password;
+        self
+    }
+
+    pub fn token(mut self, token: String) -> Self {
+        self.token = Some(token);
+        self
+    }
+
+    pub fn user_agent(mut self, user_agent: String) -> Self {
+        self.user_agent = user_agent.into();
+        self
+    }
+
+    pub fn read_timeout(mut self, timeout: Option<Duration>) -> Self {
+        self.read_timeout = timeout;
+        self
+    }
+
+    pub fn connect_timeout(mut self, timeout: Option<Duration>) -> Self {
+        self.connect_timeout = timeout;
+        self
+    }
+
+    pub fn timeout(mut self, timeout: Option<Duration>) -> Self {
+        self.timeout = timeout;
+        self
+    }
+}
 
 type Result<T> = std::result::Result<T, Error>;
 
 impl Client {
-    pub async fn new<H>(host: H) -> Result<Self>
-    where
-        H: Into<String>,
-    {
-        let host = host.into();
-        let ws_url = format!("ws://{}:{}/ws/home/overview", &host, WS_PORT);
+    const WS_PORT: u16 = 8082;
 
-        use futures_util::SinkExt;
-        use futures_util::StreamExt;
-        let (mut ws, _) = connect_async(ws_url).await?;
+    async fn token(&mut self) -> Result<String> {
+        if self.token.is_none() {
+            self.token = Some(self.get_token().await?);
+        }
 
-        ws.send(Message::Text(
-            serde_json::json!({"lang":"en_us","token":"","service":"connect"}).to_string(),
-        ))
-        .await?;
-
-        // TODO: maintan WS connection, pinging and watching for updated tokens
-        let token = if_chain::if_chain! {
-            if let Some(Ok(Message::Text(msg))) = ws.next().await ;
-            if let Ok(value) = serde_json::from_str::<SungrowResult>(&msg);
-            if let Some(ResultData::WebSocketMessage(WebSocketMessage::Connect { token })) = value.data;
-            then {
-                debug!(token, "Got WiNet-S token");
-                token
-            } else {
-                // TODO: it might be that we get some other WS messages here that are fine so we might need to take a
-                // few WS messages to find the token.
-                return Err(Error::NoToken);
-            }
-        };
-        Self::new_with_token(host, token).await
+        Ok(self.token.as_ref().expect("no token").clone())
     }
 
-    pub async fn new_with_token<H>(host: H, token: String) -> Result<Self>
-    where
-        H: Into<String>,
-    {
-        let host = host.into();
-        let http = reqwest::Client::new();
+    async fn get_token(&self) -> Result<String> {
+        use futures_util::SinkExt;
+        use futures_util::StreamExt;
+        use serde_json::json;
 
+        let ws_url = format!("ws://{}:{}/ws/home/overview", &self.host, Self::WS_PORT);
+        debug!(%ws_url, "Connecting to WiNet-S websocket");
+
+        let (mut ws, _) = connect_async(ws_url).await?;
+
+        let connect = Message::Text(
+            json!({
+                "lang": "en_us",
+                "token": self.token.as_deref().unwrap_or_default(),
+                "service": "connect"
+            })
+            .to_string(),
+        );
+        debug!(%connect, "Sending connect message");
+        ws.send(connect).await?;
+
+        while let Some(Ok(Message::Text(msg))) = ws.next().await {
+            debug!(%msg, "Got WS message");
+
+            if let SungrowResult {
+                code: 1,
+                data: Some(ResultData::WebSocketMessage(msg)),
+                ..
+            } = serde_json::from_str(&msg)?
+            {
+                match msg {
+                    WebSocketMessage::Connect { token: Some(token) } => {
+                        let login = Message::Text(
+                            json!({
+                                "lang": "en_us",
+                                "token": token,
+                                "service": "login",
+                                "username": &self.username,
+                                "passwd": &self.password,
+                            })
+                            .to_string(),
+                        );
+                        debug!(%login, "Sending login message");
+                        ws.send(login).await?;
+                    }
+                    WebSocketMessage::Login { token } => {
+                        return Ok(token.expect(
+                            "Login message should have a token, if not an error response",
+                        ));
+                    }
+                    message => {
+                        debug!(?message, "Got other message");
+                    }
+                }
+            }
+        }
+
+        Err(Error::NoToken)
+    }
+
+    pub async fn connect(&mut self) -> Result<()> {
         let data: ResultData = parse_response(
-            http.post(format!("http://{}/inverter/list", &host))
+            self.http
+                .post(format!("http://{}/inverter/list", &self.host))
                 .send()
                 .await?,
         )
         .await?;
 
         if let ResultData::DeviceList(ResultList { items, .. }) = data {
-            Ok(Client {
-                token,
-                devices: items,
-                host,
-                http,
-            })
+            self.devices = items;
         } else {
-            Err(Error::ExpectedData)
+            return Err(Error::ExpectedData);
         }
+
+        self.token = Some(self.get_token().await?);
+        Ok(())
     }
 
-    #[tracing::instrument(level = "debug")]
+    // #[tracing::instrument(level = "debug")]
     pub async fn read_register(
-        &self,
+        &mut self,
         register_type: RegisterType,
         address: u16,
         count: u16,
     ) -> Result<Vec<u16>> {
+        let token = self.token().await?;
+
         // FIXME: find device by phys_addr
         let device = &self.devices[0];
 
-        #[derive(serde::Serialize)]
-        struct Params {
-            #[serde(rename = "type")]
-            type_: u8,
-            dev_id: u8,
-            dev_type: u8,
-            dev_code: u16,
-            param_type: u8,
-            param_addr: u16,
-            param_num: u16,
-        }
-        let request = self.get("/device/getParam").query(&Params {
-            type_: 3,
-            dev_id: device.dev_id,
-            dev_type: device.dev_type,
-            dev_code: device.dev_code,
-            param_type: register_type.param(),
-            param_addr: address,
-            param_num: count,
-        });
+        let request = self
+            .http
+            .get(format!("http://{}{}", &self.host, "/device/getParam"))
+            .header(reqwest::header::ACCEPT, "application/json")
+            .query(&[
+                ("dev_id", device.dev_id),
+                ("dev_type", device.dev_type),
+                ("param_type", register_type.param()),
+                ("type", 3),
+            ])
+            .query(&[
+                ("dev_code", device.dev_code),
+                ("param_addr", address),
+                ("param_num", count),
+            ])
+            .query(&[("lang", "en_us"), ("token", &token)]);
+        debug!(?request, "sending request");
         let response = request.send().await?;
 
         let result = parse_response(response).await?;
@@ -153,7 +290,7 @@ impl Client {
     }
 
     #[tracing::instrument(level = "debug")]
-    pub async fn write_register(&self, address: u16, data: &[u16]) -> Result<()> {
+    pub async fn write_register(&mut self, address: u16, data: &[u16]) -> Result<()> {
         if data.is_empty() {
             return Err(Error::ExpectedData);
         }
@@ -162,25 +299,26 @@ impl Client {
 
         use serde_json::json;
         let body = json!({
-            "lang": "en_us",
-            "token": &self.token,
             "dev_id": device.dev_id,
             "dev_type": device.dev_type,
             "dev_code": device.dev_code,
             "param_addr": address.to_string(),
             "param_size": data.len().to_string(),
             "param_value": data[0].to_string(),
+            "lang": "en_us",
+            "token": &self.token().await?,
         });
         let request = self
             .http
             .post(format!("http://{}{}", &self.host, "/device/setParam"))
+            .header(reqwest::header::ACCEPT, "application/json")
             .json(&body);
         let response = request.send().await?;
         parse_response(response).await?;
         Ok(())
     }
 
-    pub async fn running_state(&self) -> Result<RunningState> {
+    pub async fn running_state(&mut self) -> Result<RunningState> {
         let raw = *self
             .read_register(RegisterType::Input, 13001, 1)
             .await?
@@ -212,12 +350,6 @@ impl Client {
             power_generated_from_load: bits.intersects(RunningStateBits::GeneratingPVPower),
             state: bits,
         })
-    }
-
-    fn get(&self, path: &str) -> reqwest::RequestBuilder {
-        self.http
-            .get(format!("http://{}{}", &self.host, path))
-            .query(&[("lang", "en_us"), ("token", self.token.as_str())])
     }
 }
 
@@ -308,7 +440,7 @@ impl RegisterType {
 // 		"dev_special":	"0",
 // 		"list":	[]
 // }
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 struct Device {
     dev_id: u8,
     dev_code: u16,
@@ -392,10 +524,20 @@ fn test_deserialize_device() {
         }
     ));
 }
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "service", rename_all = "lowercase")]
 enum WebSocketMessage {
-    Connect { token: String },
+    Connect {
+        token: Option<String>,
+        // uid: u8,
+        // tips_disable: u8,
+        // virgin_flag: u8,
+        // isFirstLogin: u8,
+        // forceModifyPasswd: u8,
+    },
+    Login {
+        token: Option<String>,
+    },
 
     // DeviceList { list: Vec<Device> },
 
@@ -412,14 +554,14 @@ enum WebSocketMessage {
     Other,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 struct ResultList<T> {
     // count: u16,
     #[serde(rename = "list")]
     items: Vec<T>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(untagged)]
 enum ResultData {
     // TODO: custom deserializer into words
@@ -469,7 +611,7 @@ fn test_deserialize_get_param() {
 
 // TODO: can I make this an _actual_ `Result<ResultData, SungrowError>`?
 //         - if code == 1, it is Ok(SungrowData), otherwise create error from code and message?
-#[derive(Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 struct SungrowResult {
     // 1 = success
     // 100 = hit user limit?
